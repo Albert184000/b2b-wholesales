@@ -1,0 +1,6 @@
+{
+  "name": "WholesaleHub — B2B Wholesale E-Commerce System",
+  "description": "Enterprise B2B wholesale commerce and ERP platform for bulk purchasing, RFQs, price negotiations, purchase orders, contracts, invoices, and shipment tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

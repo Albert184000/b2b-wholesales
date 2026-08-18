@@ -1,0 +1,411 @@
+import React, { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import {
+  AlertTriangle,
+  Archive,
+  CheckCircle2,
+  DollarSign,
+  Edit,
+  Eye,
+  Layers,
+  Package,
+  Plus,
+  Warehouse
+} from 'lucide-react';
+import {
+  Button,
+  Card,
+  Column,
+  DataTable,
+  FilterBar,
+  KPICard,
+  PageHeader,
+  SearchBar,
+  StatusBadge
+} from '../../components/ui';
+import { useApp } from '../../context/AppContext';
+import { mockCategories } from '../../data/mockData';
+import { Product, ProductCategory } from '../../types';
+import { formatCurrency, formatTierRange, getBestTier } from '../../utils/pricing';
+
+const getStockStatus = (product: Product) => {
+  if (product.availableStock <= 0) return 'Out of Stock';
+  if (product.availableStock <= product.reorderPoint) return 'Low Stock';
+  return 'In Stock';
+};
+
+const tabOptions = [
+  { id: 'products', label: 'Products' },
+  { id: 'categories', label: 'Categories' },
+  { id: 'pricing', label: 'Tier Pricing' }
+];
+
+export const AdminProductsPage: React.FC = () => {
+  const { products, inventory, updateProductStatus, showToast } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'products';
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [stockFilter, setStockFilter] = useState('ALL');
+
+  const lowStockCount = products.filter((product) => getStockStatus(product) === 'Low Stock').length;
+  const outOfStockCount = products.filter((product) => getStockStatus(product) === 'Out of Stock').length;
+  const inventoryValue = inventory.reduce((sum, item) => sum + item.available * item.unitCost, 0);
+
+  const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    return products.filter((product) => {
+      const matchSearch =
+        query === '' ||
+        product.name.toLowerCase().includes(query) ||
+        product.sku.toLowerCase().includes(query) ||
+        product.brand.toLowerCase().includes(query) ||
+        product.category.toLowerCase().includes(query);
+      const matchCategory = selectedCategory === 'ALL' || product.category === selectedCategory;
+      const matchStatus = statusFilter === 'ALL' || product.status === statusFilter;
+      const matchStock = stockFilter === 'ALL' || getStockStatus(product) === stockFilter;
+
+      return matchSearch && matchCategory && matchStatus && matchStock;
+    });
+  }, [products, searchTerm, selectedCategory, statusFilter, stockFilter]);
+
+  const categoryRows = useMemo(
+    () =>
+      mockCategories.map((category) => {
+        const categoryProducts = products.filter((product) => product.category === category.name);
+        const activeProducts = categoryProducts.filter((product) => product.status === 'Active');
+        const lowStockProducts = categoryProducts.filter((product) => getStockStatus(product) !== 'In Stock');
+
+        return {
+          ...category,
+          itemCount: categoryProducts.length,
+          activeCount: activeProducts.length,
+          lowStockCount: lowStockProducts.length
+        };
+      }),
+    [products]
+  );
+
+  const handleToggleStatus = (product: Product) => {
+    const nextStatus = product.status === 'Archived' ? 'Active' : 'Archived';
+    updateProductStatus(product.id, nextStatus);
+    showToast(`${product.sku} ${nextStatus === 'Active' ? 'reactivated' : 'deactivated'} in admin catalog.`, nextStatus === 'Active' ? 'success' : 'warning');
+  };
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('ALL');
+    setStatusFilter('ALL');
+    setStockFilter('ALL');
+  };
+
+  const productColumns: Column<Product>[] = [
+    {
+      key: 'product',
+      header: 'Product / SKU',
+      accessor: (product) => (
+        <div className="flex min-w-[260px] items-center gap-3">
+          <img
+            src={product.images[0]}
+            alt={product.name}
+            className="h-11 w-11 shrink-0 rounded-lg border border-slate-200 object-cover"
+            referrerPolicy="no-referrer"
+          />
+          <div className="min-w-0">
+            <Link to={`/admin/products/${product.id}`} className="line-clamp-1 font-bold text-slate-900 hover:text-blue-700">
+              {product.name}
+            </Link>
+            <div className="mt-0.5 font-mono text-[11px] font-semibold text-blue-700">
+              {product.sku} - {product.brand}
+            </div>
+          </div>
+        </div>
+      ),
+      sortable: true
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      accessor: (product) => (
+        <div className="min-w-[160px]">
+          <div className="font-semibold text-slate-800">{product.category}</div>
+          <div className="text-[11px] text-slate-500">{product.unit}</div>
+        </div>
+      ),
+      sortable: true
+    },
+    {
+      key: 'moq',
+      header: 'MOQ / Pricing',
+      accessor: (product) => {
+        const bestTier = getBestTier(product);
+
+        return (
+          <div className="min-w-[150px] text-xs">
+            <div className="font-bold text-slate-900">
+              MOQ {product.moq.toLocaleString()} {product.unit}
+            </div>
+            <div className="mt-0.5 font-mono text-blue-700">
+              {formatCurrency(product.basePrice, product.currency)} base
+            </div>
+            <div className="text-[11px] text-slate-500">
+              Best: {formatCurrency(bestTier?.unitPrice || product.basePrice, product.currency)} at {bestTier ? formatTierRange(bestTier, product.unit) : 'base tier'}
+            </div>
+          </div>
+        );
+      },
+      sortable: true
+    },
+    {
+      key: 'inventory',
+      header: 'Inventory',
+      accessor: (product) => (
+        <div className="min-w-[150px] text-xs">
+          <div className="font-bold text-slate-900">{product.availableStock.toLocaleString()} available</div>
+          <div className="text-slate-500">
+            {product.reservedStock.toLocaleString()} reserved - reorder at {product.reorderPoint.toLocaleString()}
+          </div>
+          <div className="mt-0.5 truncate text-[11px] text-slate-400">{product.warehouseLocation}</div>
+        </div>
+      ),
+      sortable: true
+    },
+    {
+      key: 'stock',
+      header: 'Stock',
+      accessor: (product) => <StatusBadge status={getStockStatus(product)} size="sm" />
+    },
+    {
+      key: 'status',
+      header: 'Catalog',
+      accessor: (product) => <StatusBadge status={product.status} size="sm" />
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      accessor: (product) => (
+        <div className="flex min-w-[210px] flex-wrap items-center gap-1.5">
+          <Link to={`/admin/products/${product.id}`}>
+            <Button variant="outline" size="xs" icon={Eye}>
+              View
+            </Button>
+          </Link>
+          <Link to={`/admin/products/${product.id}/edit`}>
+            <Button variant="outline" size="xs" icon={Edit}>
+              Edit
+            </Button>
+          </Link>
+          <Button
+            variant={product.status === 'Archived' ? 'success' : 'ghost'}
+            size="xs"
+            icon={product.status === 'Archived' ? CheckCircle2 : Archive}
+            onClick={() => handleToggleStatus(product)}
+          >
+            {product.status === 'Archived' ? 'Activate' : 'Deactivate'}
+          </Button>
+        </div>
+      )
+    }
+  ];
+
+  const categoryColumns: Column<ProductCategory & { activeCount: number; lowStockCount: number }>[] = [
+    {
+      key: 'category',
+      header: 'Category',
+      accessor: (category) => (
+        <div className="min-w-[220px]">
+          <div className="font-bold text-slate-900">{category.name}</div>
+          <div className="text-xs text-slate-500">{category.description}</div>
+        </div>
+      )
+    },
+    {
+      key: 'items',
+      header: 'Products',
+      accessor: (category) => (
+        <div className="font-mono text-sm font-bold text-slate-900">
+          {category.itemCount.toLocaleString()}
+        </div>
+      ),
+      align: 'right'
+    },
+    {
+      key: 'active',
+      header: 'Active',
+      accessor: (category) => <StatusBadge status={`${category.activeCount} Active`} size="sm" showDot={false} />
+    },
+    {
+      key: 'alerts',
+      header: 'Stock Alerts',
+      accessor: (category) => (
+        <StatusBadge
+          status={category.lowStockCount > 0 ? `${category.lowStockCount} Needs Review` : 'In Stock'}
+          size="sm"
+          showDot={category.lowStockCount > 0}
+        />
+      )
+    }
+  ];
+
+  const pricingColumns: Column<Product>[] = [
+    {
+      key: 'product',
+      header: 'SKU',
+      accessor: (product) => (
+        <div className="min-w-[240px]">
+          <Link to={`/admin/products/${product.id}`} className="font-bold text-slate-900 hover:text-blue-700">
+            {product.name}
+          </Link>
+          <div className="font-mono text-[11px] font-semibold text-blue-700">{product.sku}</div>
+        </div>
+      )
+    },
+    {
+      key: 'moq',
+      header: 'MOQ',
+      accessor: (product) => (
+        <span className="font-mono font-bold text-slate-900">
+          {product.moq.toLocaleString()} {product.unit}
+        </span>
+      )
+    },
+    {
+      key: 'base',
+      header: 'Base Wholesale',
+      accessor: (product) => (
+        <span className="font-mono font-bold text-slate-900">
+          {formatCurrency(product.basePrice, product.currency)}
+        </span>
+      ),
+      align: 'right'
+    },
+    {
+      key: 'tiers',
+      header: 'Tier Schedule',
+      accessor: (product) => (
+        <div className="grid min-w-[360px] gap-2 md:grid-cols-2">
+          {product.tierPricing.map((tier) => (
+            <div key={`${product.id}-${tier.minQty}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+              <div className="font-bold text-slate-900">{tier.label || 'Wholesale Tier'}</div>
+              <div className="mt-0.5 text-slate-600">
+                {formatTierRange(tier, product.unit)} at <span className="font-mono font-bold text-blue-700">{formatCurrency(tier.unitPrice, product.currency)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Product Management"
+        subtitle="Manage wholesale SKUs, MOQ thresholds, tier pricing, catalog visibility, and stock readiness."
+        breadcrumbs={[
+          { label: 'Admin Portal', href: '/admin/dashboard' },
+          { label: 'Products' }
+        ]}
+        actions={
+          <Link to="/admin/products/new">
+            <Button variant="primary" size="sm" icon={Plus}>
+              Add Product
+            </Button>
+          </Link>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KPICard title="Total Products" value={products.length} subtext={`${products.filter((product) => product.status === 'Active').length} active SKUs`} icon={Package} />
+        <KPICard title="Inventory Value" value={formatCurrency(inventoryValue)} subtext="Available stock at cost" icon={DollarSign} />
+        <KPICard title="Low Stock Products" value={lowStockCount} subtext="At or below reorder point" icon={AlertTriangle} badge={lowStockCount ? 'Review' : undefined} badgeVariant="amber" />
+        <KPICard title="Out of Stock" value={outOfStockCount} subtext="Unavailable for quoting" icon={Warehouse} badge={outOfStockCount ? 'Action' : undefined} badgeVariant="danger" />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {tabOptions.map((tab) => (
+          <Button
+            key={tab.id}
+            type="button"
+            variant={activeTab === tab.id ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => setSearchParams(tab.id === 'products' ? {} : { tab: tab.id })}
+            icon={tab.id === 'categories' ? Layers : tab.id === 'pricing' ? DollarSign : Package}
+          >
+            {tab.label}
+          </Button>
+        ))}
+      </div>
+
+      {activeTab === 'categories' ? (
+        <Card
+          title="Product Categories"
+          subtitle="Category coverage and stock-alert rollups for the wholesale catalog."
+        >
+          <DataTable columns={categoryColumns} data={categoryRows} />
+        </Card>
+      ) : activeTab === 'pricing' ? (
+        <Card
+          title="MOQ and Tier Pricing"
+          subtitle="Wholesale schedule by SKU for buyer quoting and volume-order validation."
+        >
+          <DataTable columns={pricingColumns} data={filteredProducts} />
+        </Card>
+      ) : (
+        <Card className="border-slate-200" noPadding>
+          <div className="space-y-4 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row">
+              <div className="flex-1">
+                <SearchBar
+                  value={searchTerm}
+                  onChange={setSearchTerm}
+                  placeholder="Search by product, SKU, brand, or category..."
+                />
+              </div>
+              <FilterBar
+                filters={[
+                  {
+                    id: 'category',
+                    label: 'Category',
+                    value: selectedCategory,
+                    onChange: setSelectedCategory,
+                    options: mockCategories.map((category) => ({ label: category.name, value: category.name }))
+                  },
+                  {
+                    id: 'catalog',
+                    label: 'Catalog Status',
+                    value: statusFilter,
+                    onChange: setStatusFilter,
+                    options: [
+                      { label: 'Active', value: 'Active' },
+                      { label: 'Draft', value: 'Draft' },
+                      { label: 'Archived', value: 'Archived' }
+                    ]
+                  },
+                  {
+                    id: 'stock',
+                    label: 'Stock Status',
+                    value: stockFilter,
+                    onChange: setStockFilter,
+                    options: [
+                      { label: 'In Stock', value: 'In Stock' },
+                      { label: 'Low Stock', value: 'Low Stock' },
+                      { label: 'Out of Stock', value: 'Out of Stock' }
+                    ]
+                  }
+                ]}
+                hasActiveFilters={selectedCategory !== 'ALL' || statusFilter !== 'ALL' || stockFilter !== 'ALL' || searchTerm !== ''}
+                onReset={resetFilters}
+                className="lg:w-auto"
+              />
+            </div>
+
+            <DataTable columns={productColumns} data={filteredProducts} emptyMessage="No wholesale products match the selected filters." />
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+};
