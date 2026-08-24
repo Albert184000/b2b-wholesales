@@ -100,9 +100,9 @@ export const PublicLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900">
+    <div className="min-h-screen overflow-x-clip bg-slate-50 text-slate-900">
       <header
-        className={`sticky top-0 z-40 border-b bg-white/95 backdrop-blur-md transition-all duration-200 ${
+        className={`sticky top-0 z-[80] border-b bg-white transition-all duration-200 ${
           isScrolled ? 'border-slate-200 shadow-md' : 'border-slate-200/80 shadow-xs'
         }`}
       >
@@ -301,7 +301,7 @@ export const PublicLayout: React.FC = () => {
         </div>
 
         {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-xs lg:hidden" onClick={() => setMobileMenuOpen(false)}>
+          <div className="fixed inset-0 z-[90] bg-slate-950/40 backdrop-blur-xs lg:hidden" onClick={() => setMobileMenuOpen(false)}>
             <div
               role="dialog"
               aria-modal="true"
