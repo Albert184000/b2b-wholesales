@@ -1,20 +1,59 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# B2B Wholesale E-Commerce System
 
-# Run and deploy your AI Studio app
+A modern B2B Wholesale E-Commerce and Management Information System (MIS).
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/21efaea5-a19e-4570-8383-dac2fd09ac43
+- Public B2B Marketplace
+- Buyer Portal
+- Admin / Staff Portal
+- Role & Permission Management
+- Buyer Approval
+- Product & Tier Pricing
+- RFQ & Quotation
+- Negotiation
+- Purchase Orders
+- Contracts
+- Inventory & Warehouse
+- Invoice & Credit Management
+- Shipment & Tracking
+- MIS Dashboard
+- Dynamic Reports
+- Activity Logs
+
+## User Roles
+
+- Super Admin
+- Sales Manager
+- Account Executive
+- Verified Buyer
+- Guest Buyer
+
+## Technology
+
+- React
+- TypeScript
+- Vite
+- React Router
+- Tailwind / CSS
+- Laravel REST API - planned
+- MySQL - planned
+
+## Current Status
+
+Frontend UI: 100% Complete
+
+Backend/API/Database: Pending
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+```bash
+npm install
+npm run dev
+```
 
+## Production Build
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+npm run build
+```
