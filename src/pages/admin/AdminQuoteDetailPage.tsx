@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -33,6 +33,25 @@ import {
   getQuoteUnitPrice
 } from '../../utils/rfqQuote';
 
+const getWorkspaceStage = (actionTaken: string | undefined, senderRole: string, index: number) => {
+  if (actionTaken === 'ACCEPT_QUOTE') return 'Final Price';
+  if (actionTaken === 'REJECT_QUOTE') return 'Rejected Offer';
+  if (actionTaken === 'REQUEST_MANAGER_APPROVAL' || actionTaken === 'MANAGER_APPROVED') return 'Manager Approval';
+  if (senderRole === 'BUYER' && index === 0) return 'Buyer Offer';
+  if (senderRole === 'BUYER') return 'Counter Offer';
+  if (senderRole === 'SALES_REP') return 'Sales Offer';
+  return 'System Update';
+};
+
+const getWorkspaceState = (actionTaken: string | undefined, fallbackStatus: string) => {
+  if (actionTaken === 'MANAGER_APPROVED') return 'Approved';
+  if (actionTaken === 'REQUEST_MANAGER_APPROVAL') return 'Pending Approval';
+  if (actionTaken === 'ACCEPT_QUOTE') return 'Accepted';
+  if (actionTaken === 'REJECT_QUOTE') return 'Rejected';
+  if (actionTaken === 'QUOTE_EXPIRED') return 'Expired';
+  return fallbackStatus;
+};
+
 export const AdminQuoteDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { quotes, rfqs, purchaseOrders, submitCounterOffer, showToast } = useApp();
@@ -58,10 +77,35 @@ export const AdminQuoteDetailPage: React.FC = () => {
   const relatedPO = purchaseOrders.find((po) => po.quoteId === quote.id || po.quoteNumber === quote.quoteNumber);
   const quoteTotal = getQuoteTotal(quote);
   const quoteSubtotal = getQuoteSubtotal(quote);
-  const totalQuantity = useMemo(
-    () => quote.items.reduce((sum, item) => sum + item.quantity, 0),
-    [quote.items]
-  );
+  const totalQuantity = quote.items.reduce((sum, item) => sum + item.quantity, 0);
+  const offerRows =
+    quote.negotiationHistory && quote.negotiationHistory.length > 0
+      ? quote.negotiationHistory.map((entry, index) => ({
+          id: entry.id,
+          stage: getWorkspaceStage(entry.actionTaken, entry.senderRole, index),
+          actor: entry.senderName,
+          role: entry.senderRole.replace(/_/g, ' '),
+          price: entry.proposedPrice || quoteTotal,
+          quantity: entry.quantity || totalQuantity,
+          comments: entry.message,
+          timestamp: entry.timestamp,
+          state: getWorkspaceState(entry.actionTaken, entry.status || quote.status),
+          expiry: quote.validUntil || quote.expiryDate || 'TBD'
+        }))
+      : [
+          {
+            id: `${quote.id}-initial-offer`,
+            stage: 'Sales Offer',
+            actor: quote.salesRep?.name || 'Account Executive',
+            role: 'SALES REP',
+            price: quoteTotal,
+            quantity: totalQuantity,
+            comments: quote.notes || 'Initial wholesale quotation prepared for buyer review.',
+            timestamp: quote.createdAt || quote.createdDate || '2026-08-24',
+            state: quote.status,
+            expiry: quote.validUntil || quote.expiryDate || 'TBD'
+          }
+        ];
 
   const recordDecision = () => {
     if (!decisionModal) return;
@@ -114,6 +158,55 @@ export const AdminQuoteDetailPage: React.FC = () => {
       header: 'Line Total',
       align: 'right',
       accessor: (item) => <span className="font-mono font-extrabold text-blue-700">{formatCurrency(item.subtotal || item.quantity * getQuoteUnitPrice(item))}</span>
+    }
+  ];
+
+  const offerColumns: Column<(typeof offerRows)[number]>[] = [
+    {
+      key: 'stage',
+      header: 'Stage',
+      accessor: (row) => (
+        <div className="min-w-[170px]">
+          <div className="font-bold text-slate-900">{row.stage}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{row.role}</div>
+        </div>
+      )
+    },
+    {
+      key: 'actor',
+      header: 'Actor / Time',
+      accessor: (row) => (
+        <div className="min-w-[180px]">
+          <div className="font-semibold text-slate-900">{row.actor}</div>
+          <div className="text-xs text-slate-500">{row.timestamp}</div>
+        </div>
+      )
+    },
+    {
+      key: 'price',
+      header: 'Offer',
+      align: 'right',
+      accessor: (row) => (
+        <div className="min-w-[130px]">
+          <div className="font-mono font-extrabold text-blue-700">{formatCurrency(row.price, quote.currency || 'USD')}</div>
+          <div className="text-xs text-slate-500">{row.quantity.toLocaleString()} units</div>
+        </div>
+      )
+    },
+    {
+      key: 'comment',
+      header: 'Comment',
+      accessor: (row) => <div className="line-clamp-2 min-w-[260px] text-sm text-slate-600">{row.comments}</div>
+    },
+    {
+      key: 'approval',
+      header: 'Approval / Expiry',
+      accessor: (row) => (
+        <div className="min-w-[150px] space-y-1">
+          <StatusBadge status={row.state} size="sm" />
+          <div className="text-[11px] text-slate-500">Expires {row.expiry}</div>
+        </div>
+      )
     }
   ];
 
@@ -196,6 +289,35 @@ export const AdminQuoteDetailPage: React.FC = () => {
 
       <Card title="Quoted Items">
         <DataTable columns={itemColumns} data={quote.items} />
+      </Card>
+
+      <Card title="Negotiation Workspace" subtitle="Buyer offer, sales offer, counter offer, manager approval, and final-price states.">
+        <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-5">
+          {['Buyer Offer', 'Sales Offer', 'Counter Offer', 'Manager Approval', 'Final Price'].map((stage, index) => (
+            <div key={stage} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-blue-700 text-xs font-black text-white">
+                {index + 1}
+              </div>
+              <div className="mt-2 text-xs font-bold text-slate-900">{stage}</div>
+              {index < 4 && <div className="mt-1 text-xs font-bold text-slate-400">Review</div>}
+            </div>
+          ))}
+        </div>
+        <DataTable columns={offerColumns} data={offerRows} enablePagination pageSize={5} className="[&_table]:min-w-[980px]" />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" icon={MessageSquare} onClick={() => setDecisionModal('message')}>
+            Counter / Note
+          </Button>
+          <Button variant="success" size="sm" icon={CheckCircle2} onClick={() => setDecisionModal('approve')}>
+            Accept / Approve
+          </Button>
+          <Button variant="outline" size="sm" icon={XCircle} onClick={() => setDecisionModal('reject')}>
+            Reject
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => showToast(`${quoteNumber} expiry review queued for staff follow-up.`, 'info')}>
+            Mark Expiry Review
+          </Button>
+        </div>
       </Card>
 
       <Card title="Negotiation Timeline">

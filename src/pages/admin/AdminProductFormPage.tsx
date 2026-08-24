@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Package, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, LockKeyhole, Package, Plus, Save, Trash2 } from 'lucide-react';
 import {
   Button,
   Card,
@@ -14,6 +14,7 @@ import { useApp } from '../../context/AppContext';
 import { mockCategories } from '../../data/mockData';
 import { Product, TierPrice } from '../../types';
 import { formatCurrency, formatTierRange } from '../../utils/pricing';
+import { hasPermission } from '../../utils/rbac';
 
 const warehouseOptions = [
   {
@@ -45,7 +46,7 @@ const createProductId = (sku: string) =>
 export const AdminProductFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { products, inventory, saveProduct, showToast } = useApp();
+  const { currentUser, products, inventory, saveProduct, showToast } = useApp();
 
   const existingProduct = useMemo(
     () => (id ? products.find((product) => product.id === id) : undefined),
@@ -55,6 +56,7 @@ export const AdminProductFormPage: React.FC = () => {
     ? inventory.find((item) => item.productId === existingProduct.id)
     : undefined;
   const isEditing = Boolean(existingProduct);
+  const canViewCostPrice = hasPermission(currentUser.role, 'products.view_cost_price');
 
   const [name, setName] = useState(existingProduct?.name || '');
   const [sku, setSku] = useState(existingProduct?.sku || '');
@@ -73,15 +75,39 @@ export const AdminProductFormPage: React.FC = () => {
   const [locationBin, setLocationBin] = useState(primaryInventory?.locationBin || primaryInventory?.location || warehouseOptions[0].bin);
   const [tierPricing, setTierPricing] = useState<TierPrice[]>(
     existingProduct?.tierPricing || [
-      { minQty: 10, maxQty: 49, unitPrice: 140, label: 'Standard Wholesale' },
-      { minQty: 50, maxQty: 199, unitPrice: 128, label: 'Volume Tier' },
-      { minQty: 200, maxQty: null, unitPrice: 115, label: 'Contract Tier' }
+      { minQty: 20, maxQty: 49, unitPrice: 140, label: 'Standard Wholesale', effectiveDate: '2026-08-01', status: 'Active' },
+      { minQty: 50, maxQty: 99, unitPrice: 132, label: 'Volume Tier', effectiveDate: '2026-08-01', status: 'Active' },
+      { minQty: 100, maxQty: 499, unitPrice: 124, label: 'Distributor Tier', effectiveDate: '2026-09-01', status: 'Scheduled' },
+      { minQty: 500, maxQty: null, unitPrice: 115, label: 'Enterprise Tier', effectiveDate: '2026-09-01', status: 'Scheduled' }
     ]
   );
 
   const selectedWarehouse = warehouseOptions.find((warehouse) => warehouse.id === warehouseId) || warehouseOptions[0];
   const reservedStock = primaryInventory?.reserved || existingProduct?.reservedStock || 0;
   const availableStock = Math.max(0, stockQty - reservedStock);
+  const marginEstimate = basePrice > 0 ? Math.round(((basePrice - costPrice) / basePrice) * 100) : 0;
+  const priorityPreview = [
+    {
+      label: 'Contract Price',
+      value: formatCurrency(Math.max(1, basePrice * 0.78)),
+      note: 'Applied first when an active buyer contract exists.'
+    },
+    {
+      label: 'Buyer Group Price',
+      value: formatCurrency(Math.max(1, basePrice * 0.88)),
+      note: 'Falls back to negotiated buyer group pricing.'
+    },
+    {
+      label: 'Tier Price',
+      value: formatCurrency(tierPricing[0]?.unitPrice || basePrice),
+      note: 'Uses the matching quantity tier after MOQ validation.'
+    },
+    {
+      label: 'Base Wholesale Price',
+      value: formatCurrency(basePrice),
+      note: 'Default price when no special pricing applies.'
+    }
+  ];
 
   const addTier = () => {
     const lastTier = tierPricing[tierPricing.length - 1];
@@ -93,7 +119,9 @@ export const AdminProductFormPage: React.FC = () => {
         minQty: nextMinQty,
         maxQty: null,
         unitPrice: Math.max(1, Math.round(basePrice * 0.85)),
-        label: 'Custom Volume Tier'
+        label: 'Custom Volume Tier',
+        effectiveDate: '2026-09-01',
+        status: 'Scheduled'
       }
     ]);
   };
@@ -138,7 +166,7 @@ export const AdminProductFormPage: React.FC = () => {
       moq,
       unit,
       currency: existingProduct?.currency || 'USD',
-      costPrice,
+      costPrice: canViewCostPrice ? costPrice : existingProduct?.costPrice || costPrice,
       basePrice,
       tierPricing: normalizedTiers,
       buyerGroupPricing: existingProduct?.buyerGroupPricing,
@@ -302,16 +330,26 @@ export const AdminProductFormPage: React.FC = () => {
               onChange={(event) => setUnit(event.target.value)}
               placeholder="Units / Cartons / Pallets"
             />
-            <Input
-              label="Cost Price"
-              type="number"
-              min={0}
-              step="0.01"
-              required
-              prefixText="$"
-              value={costPrice}
-              onChange={(event) => setCostPrice(parseFloat(event.target.value) || 0)}
-            />
+            {canViewCostPrice ? (
+              <Input
+                label="Cost Price"
+                type="number"
+                min={0}
+                step="0.01"
+                required
+                prefixText="$"
+                value={costPrice}
+                onChange={(event) => setCostPrice(parseFloat(event.target.value) || 0)}
+              />
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="text-xs font-semibold text-slate-700">Cost Price</div>
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-500">
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                  Restricted
+                </div>
+              </div>
+            )}
             <Input
               label="Base Wholesale Price"
               type="number"
@@ -362,9 +400,27 @@ export const AdminProductFormPage: React.FC = () => {
             <div>
               <div className="font-semibold uppercase tracking-wide text-slate-500">Margin Estimate</div>
               <div className="mt-1 font-mono text-lg font-bold text-slate-900">
-                {basePrice > 0 ? `${Math.round(((basePrice - costPrice) / basePrice) * 100)}%` : '0%'}
+                {canViewCostPrice ? `${marginEstimate}%` : 'Restricted'}
               </div>
             </div>
+          </div>
+        </Card>
+
+        <Card title="Pricing Priority" subtitle="Mock pricing resolution shown to staff before saving.">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+            {priorityPreview.map((step, index) => (
+              <div key={step.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-700 text-xs font-black text-white">
+                    {index + 1}
+                  </div>
+                  <StatusBadge status={index === 0 ? 'Highest Priority' : index === 3 ? 'Default' : 'Fallback'} size="sm" showDot={false} />
+                </div>
+                <div className="mt-3 text-sm font-bold text-slate-900">{step.label}</div>
+                <div className="mt-1 font-mono text-lg font-extrabold text-blue-700">{step.value}</div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{step.note}</p>
+              </div>
+            ))}
           </div>
         </Card>
 
@@ -380,12 +436,12 @@ export const AdminProductFormPage: React.FC = () => {
           <div className="space-y-3">
             {tierPricing.map((tier, index) => (
               <div key={`${index}-${tier.minQty}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
                   <Input
                     label="Tier Label"
                     value={tier.label || ''}
                     onChange={(event) => updateTier(index, 'label', event.target.value)}
-                    className="md:col-span-2"
+                    className="xl:col-span-2"
                   />
                   <Input
                     label="Min Qty"
@@ -411,6 +467,24 @@ export const AdminProductFormPage: React.FC = () => {
                       prefixText="$"
                       value={tier.unitPrice}
                       onChange={(event) => updateTier(index, 'unitPrice', parseFloat(event.target.value) || 0)}
+                    />
+                  </div>
+                  <Input
+                    label="Effective Date"
+                    type="date"
+                    value={tier.effectiveDate || ''}
+                    onChange={(event) => updateTier(index, 'effectiveDate', event.target.value)}
+                  />
+                  <div className="flex items-end gap-2">
+                    <Select
+                      label="Status"
+                      value={tier.status || 'Active'}
+                      onChange={(event) => updateTier(index, 'status', event.target.value)}
+                      options={[
+                        { label: 'Active', value: 'Active' },
+                        { label: 'Scheduled', value: 'Scheduled' },
+                        { label: 'Inactive', value: 'Inactive' }
+                      ]}
                     />
                     {tierPricing.length > 1 && (
                       <Button

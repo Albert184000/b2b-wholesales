@@ -443,9 +443,15 @@ export const AdminProductsPage: React.FC = () => {
         <div className="grid min-w-[360px] gap-2 md:grid-cols-2">
           {product.tierPricing.map((tier) => (
             <div key={`${product.id}-${tier.minQty}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-              <div className="font-bold text-slate-900">{tier.label || 'Wholesale Tier'}</div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-bold text-slate-900">{tier.label || 'Wholesale Tier'}</div>
+                <StatusBadge status={tier.status || 'Active'} size="sm" showDot={false} />
+              </div>
               <div className="mt-0.5 text-slate-600">
                 {formatTierRange(tier, product.unit)} at <span className="font-mono font-bold text-blue-700">{formatCurrency(tier.unitPrice, product.currency)}</span>
+              </div>
+              <div className="mt-1 text-[11px] font-semibold text-slate-500">
+                Effective {tier.effectiveDate || 'immediately'}
               </div>
             </div>
           ))}

@@ -129,6 +129,8 @@ export interface TierPrice {
   maxQty: number | null; // null means "and above" / "No limit"
   unitPrice: number;
   label?: string;
+  effectiveDate?: string;
+  status?: 'Active' | 'Inactive' | 'Scheduled' | string;
 }
 
 export interface BuyerGroupPricing {
@@ -831,6 +833,8 @@ export interface ActivityLog {
   details?: string;
   description?: string;
   ipAddress?: string;
+  oldValue?: Record<string, string | number | boolean | null>;
+  newValue?: Record<string, string | number | boolean | null>;
   timestamp: string;
 }
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, CreditCard, Edit, Eye, FileMinus, Plus, Receipt, Save, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CreditCard, Edit, Eye, FileMinus, Plus, Receipt, Save, Search, Trash2 } from 'lucide-react';
 import {
   Button,
   Card,
@@ -31,6 +31,7 @@ interface CreditNoteRow {
   id: string;
   invoiceNumber: string;
   buyerName: string;
+  reasonCategory: string;
   reason: string;
   amount: number;
   status: string;
@@ -49,6 +50,7 @@ interface PaymentDraft {
 interface CreditNoteDraft {
   id: string;
   invoiceId: string;
+  reasonCategory: string;
   reason: string;
   amount: string;
   status: string;
@@ -61,6 +63,7 @@ const initialCreditNotes: CreditNoteRow[] = [
     id: 'CN-2026-004',
     invoiceNumber: 'INV-2026-0108',
     buyerName: 'ABC Technology Ltd.',
+    reasonCategory: 'Price Corrections',
     reason: 'Freight service adjustment',
     amount: 180,
     status: 'Issued',
@@ -70,6 +73,7 @@ const initialCreditNotes: CreditNoteRow[] = [
     id: 'CN-2026-003',
     invoiceNumber: 'INV-2026-0097',
     buyerName: 'Mekong Retail Corp.',
+    reasonCategory: 'Damaged Products',
     reason: 'Damaged carton allowance',
     amount: 420,
     status: 'Pending Approval',
@@ -89,6 +93,7 @@ const createPaymentDraft = (invoiceId = ''): PaymentDraft => ({
 const createCreditNoteDraft = (invoiceId = ''): CreditNoteDraft => ({
   id: `CN-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
   invoiceId,
+  reasonCategory: 'Returns',
   reason: '',
   amount: '',
   status: 'Pending Approval'
@@ -102,6 +107,9 @@ export const AdminInvoicesPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [manualPayments, setManualPayments] = useState<PaymentRow[]>([]);
   const [creditNoteRows, setCreditNoteRows] = useState<CreditNoteRow[]>(initialCreditNotes);
+  const [selectedCreditNote, setSelectedCreditNote] = useState<CreditNoteRow | null>(null);
+  const [voidInvoice, setVoidInvoice] = useState<Invoice | null>(null);
+  const [voidedInvoiceIds, setVoidedInvoiceIds] = useState<string[]>([]);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft>(() => createPaymentDraft(invoices[0]?.id || ''));
@@ -113,6 +121,7 @@ export const AdminInvoicesPage: React.FC = () => {
   const paidTotal = invoices.reduce((sum, invoice) => sum + getInvoicePaidAmount(invoice), 0);
   const balanceTotal = invoices.reduce((sum, invoice) => sum + getInvoiceBalance(invoice), 0);
   const overdueCount = invoices.filter((invoice) => invoice.status === 'Overdue').length;
+  const getInvoiceUiStatus = (invoice: Invoice) => (voidedInvoiceIds.includes(invoice.id) ? 'Void' : invoice.status);
 
   const paymentRows: PaymentRow[] = useMemo(
     () =>
@@ -137,7 +146,7 @@ export const AdminInvoicesPage: React.FC = () => {
       (invoice.invoiceNumber || invoice.id).toLowerCase().includes(query) ||
       (invoice.companyName || invoice.buyerName || '').toLowerCase().includes(query) ||
       (invoice.poNumber || invoice.poId || '').toLowerCase().includes(query);
-    const matchStatus = statusFilter === 'ALL' || invoice.status === statusFilter;
+    const matchStatus = statusFilter === 'ALL' || getInvoiceUiStatus(invoice) === statusFilter;
     return matchSearch && matchStatus;
   });
 
@@ -159,6 +168,7 @@ export const AdminInvoicesPage: React.FC = () => {
       note.id.toLowerCase().includes(query) ||
       note.invoiceNumber.toLowerCase().includes(query) ||
       note.buyerName.toLowerCase().includes(query) ||
+      note.reasonCategory.toLowerCase().includes(query) ||
       note.reason.toLowerCase().includes(query)
     );
   });
@@ -236,6 +246,7 @@ export const AdminInvoicesPage: React.FC = () => {
       setCreditNoteDraft({
         id: note.id,
         invoiceId: invoice?.id || invoices[0]?.id || '',
+        reasonCategory: note.reasonCategory,
         reason: note.reason,
         amount: String(note.amount),
         status: note.status
@@ -261,6 +272,7 @@ export const AdminInvoicesPage: React.FC = () => {
       id: creditNoteDraft.id.trim() || `CN-${Date.now()}`,
       invoiceNumber: invoice.invoiceNumber || invoice.id,
       buyerName: invoice.companyName || invoice.buyerName || 'Unassigned buyer',
+      reasonCategory: creditNoteDraft.reasonCategory,
       reason: creditNoteDraft.reason.trim(),
       amount,
       status: creditNoteDraft.status,
@@ -279,6 +291,13 @@ export const AdminInvoicesPage: React.FC = () => {
   const deleteCreditNote = (note: CreditNoteRow) => {
     setCreditNoteRows((current) => current.filter((item) => item.id !== note.id));
     showToast(`${note.id} removed from credit notes.`, 'warning');
+  };
+
+  const confirmVoidInvoice = () => {
+    if (!voidInvoice) return;
+    setVoidedInvoiceIds((current) => (current.includes(voidInvoice.id) ? current : [...current, voidInvoice.id]));
+    showToast(`${voidInvoice.invoiceNumber || voidInvoice.id} marked Void in the finance workspace.`, 'warning');
+    setVoidInvoice(null);
   };
 
   const invoiceColumns: Column<Invoice>[] = [
@@ -314,7 +333,11 @@ export const AdminInvoicesPage: React.FC = () => {
       key: 'balance',
       header: 'Balance',
       align: 'right',
-      accessor: (invoice) => <span className="font-mono font-bold text-rose-700">{formatCurrency(getInvoiceBalance(invoice), invoice.currency || 'USD')}</span>
+      accessor: (invoice) => (
+        <span className="font-mono font-bold text-rose-700">
+          {formatCurrency(getInvoiceUiStatus(invoice) === 'Void' ? 0 : getInvoiceBalance(invoice), invoice.currency || 'USD')}
+        </span>
+      )
     },
     {
       key: 'due',
@@ -324,7 +347,7 @@ export const AdminInvoicesPage: React.FC = () => {
     {
       key: 'status',
       header: 'Status',
-      accessor: (invoice) => <StatusBadge status={invoice.status} size="sm" />
+      accessor: (invoice) => <StatusBadge status={getInvoiceUiStatus(invoice)} size="sm" />
     },
     {
       key: 'actions',
@@ -336,7 +359,7 @@ export const AdminInvoicesPage: React.FC = () => {
               View
             </Button>
           </Link>
-          {getInvoiceBalance(invoice) > 0 && (
+          {getInvoiceUiStatus(invoice) !== 'Void' && getInvoiceBalance(invoice) > 0 && (
             <Button
               variant="success"
               size="xs"
@@ -347,6 +370,11 @@ export const AdminInvoicesPage: React.FC = () => {
               }}
             >
               Paid
+            </Button>
+          )}
+          {getInvoiceUiStatus(invoice) !== 'Void' && (
+            <Button variant="ghost" size="xs" icon={FileMinus} onClick={() => setVoidInvoice(invoice)}>
+              Void
             </Button>
           )}
         </div>
@@ -394,7 +422,16 @@ export const AdminInvoicesPage: React.FC = () => {
     { key: 'note', header: 'Credit Note', accessor: (note) => <span className="font-mono font-bold text-blue-700">{note.id}</span> },
     { key: 'invoice', header: 'Invoice', accessor: (note) => <span className="font-mono text-slate-800">{note.invoiceNumber}</span> },
     { key: 'buyer', header: 'Buyer', accessor: (note) => <span className="font-semibold text-slate-900">{note.buyerName}</span> },
-    { key: 'reason', header: 'Reason', accessor: (note) => <span className="text-slate-700">{note.reason}</span> },
+    {
+      key: 'reason',
+      header: 'Reason',
+      accessor: (note) => (
+        <div className="min-w-[220px]">
+          <div className="font-semibold text-slate-900">{note.reasonCategory}</div>
+          <div className="text-xs text-slate-600">{note.reason}</div>
+        </div>
+      )
+    },
     { key: 'amount', header: 'Amount', align: 'right', accessor: (note) => <span className="font-mono font-bold text-slate-900">{formatCurrency(note.amount)}</span> },
     { key: 'status', header: 'Status', accessor: (note) => <StatusBadge status={note.status} size="sm" /> },
     {
@@ -402,6 +439,9 @@ export const AdminInvoicesPage: React.FC = () => {
       header: 'Actions',
       accessor: (note) => (
         <div className="flex min-w-[130px] flex-wrap items-center gap-1.5">
+          <Button variant="outline" size="xs" icon={Eye} onClick={() => setSelectedCreditNote(note)}>
+            View
+          </Button>
           <Button variant="outline" size="xs" icon={Edit} onClick={() => openCreditNoteModal(note)}>
             Edit
           </Button>
@@ -485,11 +525,12 @@ export const AdminInvoicesPage: React.FC = () => {
                     value: statusFilter,
                     onChange: setStatusFilter,
                     options: [
+                      { label: 'Draft', value: 'Draft' },
                       { label: 'Issued', value: 'Issued' },
-                      { label: 'Unpaid', value: 'Unpaid' },
                       { label: 'Partially Paid', value: 'Partially Paid' },
                       { label: 'Paid', value: 'Paid' },
-                      { label: 'Overdue', value: 'Overdue' }
+                      { label: 'Overdue', value: 'Overdue' },
+                      { label: 'Void', value: 'Void' }
                     ]
                   }
                 ]}
@@ -634,8 +675,21 @@ export const AdminInvoicesPage: React.FC = () => {
               ]}
             />
           </div>
+          <Select
+            label="Credit Reason Category"
+            required
+            value={creditNoteDraft.reasonCategory}
+            onChange={(event) => setCreditNoteDraft((draft) => ({ ...draft, reasonCategory: event.target.value }))}
+            options={[
+              { label: 'Returns', value: 'Returns' },
+              { label: 'Damaged Products', value: 'Damaged Products' },
+              { label: 'Incorrect Billing', value: 'Incorrect Billing' },
+              { label: 'Disputes', value: 'Disputes' },
+              { label: 'Price Corrections', value: 'Price Corrections' }
+            ]}
+          />
           <Textarea
-            label="Reason"
+            label="Reason Details"
             required
             rows={3}
             value={creditNoteDraft.reason}
@@ -651,6 +705,89 @@ export const AdminInvoicesPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {selectedCreditNote && (
+        <Modal
+          isOpen={Boolean(selectedCreditNote)}
+          onClose={() => setSelectedCreditNote(null)}
+          title={selectedCreditNote.id}
+          subtitle="Credit note detail, category, invoice reference, and approval state."
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Invoice</div>
+                <div className="mt-1 font-mono font-bold text-blue-700">{selectedCreditNote.invoiceNumber}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Buyer</div>
+                <div className="mt-1 font-bold text-slate-900">{selectedCreditNote.buyerName}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Category</div>
+                <div className="mt-1 font-bold text-slate-900">{selectedCreditNote.reasonCategory}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Amount</div>
+                <div className="mt-1 font-mono font-extrabold text-slate-900">{formatCurrency(selectedCreditNote.amount)}</div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Reason Details</div>
+                <StatusBadge status={selectedCreditNote.status} size="sm" />
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{selectedCreditNote.reason}</p>
+              <div className="mt-3 text-xs font-semibold text-slate-500">Issued date: {selectedCreditNote.date}</div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {voidInvoice && (
+        <Modal
+          isOpen={Boolean(voidInvoice)}
+          onClose={() => setVoidInvoice(null)}
+          title={`Void ${voidInvoice.invoiceNumber || voidInvoice.id}`}
+          subtitle="Mock finance control action for invoice cancellation."
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <div className="font-bold">Confirm invoice void</div>
+                <p className="mt-1 leading-6">
+                  This UI action marks the invoice as Void in the local finance workspace and hides the outstanding balance from the list view.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Buyer</div>
+                <div className="mt-1 font-bold text-slate-900">{voidInvoice.companyName || voidInvoice.buyerName}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Total</div>
+                <div className="mt-1 font-mono font-bold text-slate-900">{formatCurrency(getInvoiceTotal(voidInvoice), voidInvoice.currency || 'USD')}</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Current Status</div>
+                <div className="mt-1">
+                  <StatusBadge status={voidInvoice.status} size="sm" />
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={() => setVoidInvoice(null)}>
+                Cancel
+              </Button>
+              <Button type="button" variant="danger" size="sm" icon={FileMinus} onClick={confirmVoidInvoice}>
+                Void Invoice
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

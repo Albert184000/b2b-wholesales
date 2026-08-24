@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, MapPin, Package, RadioTower, Truck, UserRound } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, FileCheck, MapPin, Package, PenLine, RadioTower, Truck, UserRound } from 'lucide-react';
 import {
   Button,
   Card,
@@ -38,10 +38,17 @@ export const AdminShipmentDetailPage: React.FC = () => {
   const invoice = invoices.find((record) => record.id === shipment.invoiceId || record.poId === shipment.poId);
   const totals = getShipmentTotals(shipment);
   const progress = getShipmentProgress(shipment);
+  const shipmentStatuses = ['Planned', 'Preparing', 'Ready', 'Shipped', 'In Transit', 'Partially Delivered', 'Delivered', 'Failed', 'Cancelled'];
+  const proofOfDelivery = shipment.proofOfDelivery || {
+    receivedBy: shipment.contactPerson || 'Receiver pending',
+    timestamp: shipment.actualDelivery || 'Pending delivery confirmation',
+    notes: 'Proof of delivery will be attached after receiver confirmation.',
+    status: shipment.status === 'Delivered' ? 'Available' : 'Pending'
+  };
 
   const setStatus = (status: string) => {
     updateShipmentStatus(shipment.id, status);
-    showToast(`${shipment.shipmentNumber || shipment.id} moved to ${status}.`, status === 'Delayed' ? 'warning' : 'success');
+    showToast(`${shipment.shipmentNumber || shipment.id} moved to ${status}.`, ['Failed', 'Cancelled'].includes(status) ? 'warning' : 'success');
   };
 
   const itemColumns: Column<ShipmentItem>[] = [
@@ -72,6 +79,16 @@ export const AdminShipmentDetailPage: React.FC = () => {
       header: 'Delivered',
       align: 'right',
       accessor: (item) => <span className="font-mono font-bold text-slate-900">{item.deliveredQty.toLocaleString()}</span>
+    },
+    {
+      key: 'remaining',
+      header: 'Remaining',
+      align: 'right',
+      accessor: (item) => (
+        <span className="font-mono font-bold text-amber-700">
+          {(item.remainingQty ?? Math.max(0, item.orderedQty - item.shippedQty)).toLocaleString()}
+        </span>
+      )
     }
   ];
 
@@ -116,6 +133,23 @@ export const AdminShipmentDetailPage: React.FC = () => {
         <KPICard title="Carrier" value={shipment.carrier} subtext={shipment.serviceLevel || 'Freight service'} icon={RadioTower} />
         <KPICard title="Packages" value={shipment.packagesCount || shipment.items?.length || 0} subtext={shipment.warehouseName || shipment.originWarehouse} icon={MapPin} />
       </div>
+
+      <Card title="Shipment Status Workflow" subtitle="Operational status controls from planning through delivery completion.">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-9">
+          {shipmentStatuses.map((status) => (
+            <Button
+              key={status}
+              type="button"
+              variant={shipment.status === status ? 'primary' : status === 'Failed' || status === 'Cancelled' ? 'ghost' : 'outline'}
+              size="sm"
+              onClick={() => setStatus(status)}
+              className="justify-center"
+            >
+              {status}
+            </Button>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card title="Shipment Route" className="xl:col-span-2">
@@ -169,6 +203,67 @@ export const AdminShipmentDetailPage: React.FC = () => {
                   <div className="font-bold text-slate-900">{shipment.contactPerson || 'Receiving contact pending'}</div>
                   <div className="text-xs text-slate-500">{shipment.deliveryWindow || 'Delivery window pending'}</div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <Card title="Partial Shipment Summary" subtitle="Ordered vs shipped vs remaining quantity across shipment lines.">
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Ordered</div>
+              <div className="mt-1 font-mono text-2xl font-extrabold text-slate-900">{totals.ordered.toLocaleString()}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Shipped</div>
+              <div className="mt-1 font-mono text-2xl font-extrabold text-blue-700">{totals.shipped.toLocaleString()}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Remaining</div>
+              <div className="mt-1 font-mono text-2xl font-extrabold text-amber-700">{Math.max(0, totals.ordered - totals.shipped).toLocaleString()}</div>
+            </div>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-blue-600" style={{ width: `${totals.ordered > 0 ? Math.round((totals.shipped / totals.ordered) * 100) : 0}%` }} />
+          </div>
+        </Card>
+
+        <Card title="Proof of Delivery" subtitle="Receiver confirmation, signature placeholder, delivery photo, and POD document status.">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <UserRound className="h-4 w-4" />
+                Receiver
+              </div>
+              <div className="mt-2 font-bold text-slate-900">{proofOfDelivery.receivedBy}</div>
+              <div className="mt-1 text-sm text-slate-600">{proofOfDelivery.timestamp}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <FileCheck className="h-4 w-4" />
+                POD Status
+              </div>
+              <div className="mt-2">
+                <StatusBadge status={proofOfDelivery.status || 'Pending'} size="sm" />
+              </div>
+              <div className="mt-1 text-sm text-slate-600">{proofOfDelivery.notes || 'No delivery notes attached yet.'}</div>
+            </div>
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                <PenLine className="h-4 w-4 text-blue-700" />
+                Signature Placeholder
+              </div>
+              <div className="mt-4 h-14 rounded-lg border border-slate-200 bg-slate-50" />
+            </div>
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                <Camera className="h-4 w-4 text-blue-700" />
+                Delivery Photo Placeholder
+              </div>
+              <div className="mt-4 flex h-14 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-400">
+                POD image pending
               </div>
             </div>
           </div>

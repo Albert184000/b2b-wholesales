@@ -7,6 +7,7 @@ import {
   ClipboardList,
   DollarSign,
   History,
+  LockKeyhole,
   PackageCheck,
   Warehouse
 } from 'lucide-react';
@@ -27,6 +28,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { InventoryItem } from '../../types';
 import { formatCurrency } from '../../utils/pricing';
+import { hasPermission } from '../../utils/rbac';
 
 const getInventoryStockStatus = (item: InventoryItem) => {
   if (item.available <= 0) return 'Out of Stock';
@@ -35,7 +37,7 @@ const getInventoryStockStatus = (item: InventoryItem) => {
 };
 
 export const AdminInventoryPage: React.FC = () => {
-  const { inventory, products, purchaseOrders, updateStock, showToast } = useApp();
+  const { currentUser, inventory, products, purchaseOrders, updateStock, showToast } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'stock';
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,17 +55,30 @@ export const AdminInventoryPage: React.FC = () => {
   const lowStockCount = inventory.filter((item) => getInventoryStockStatus(item) === 'Low Stock').length;
   const outOfStockCount = inventory.filter((item) => getInventoryStockStatus(item) === 'Out of Stock').length;
   const inventoryValue = inventory.reduce((sum, item) => sum + item.available * item.unitCost, 0);
+  const canViewCostPrice = hasPermission(currentUser.role, 'products.view_cost_price');
 
-  const stockMovements = inventory.map((item, index) => ({
-    id: `mov-${item.id}`,
-    sku: item.sku,
-    productName: item.productName,
-    warehouseName: item.warehouseName,
-    type: index % 2 === 0 ? 'Cycle Count Adjustment' : 'Inbound Receipt',
-    quantity: index % 2 === 0 ? item.available - item.reorderPoint : item.reserved,
-    date: `2026-08-${String(18 - index).padStart(2, '0')}`,
-    status: 'Completed'
-  }));
+  const movementTypes = ['Stock In', 'Stock Out', 'Transfer', 'Reservation', 'Release', 'Adjustment', 'Return'];
+  const stockMovements = inventory.map((item, index) => {
+    const type = movementTypes[index % movementTypes.length];
+
+    return {
+      id: `mov-${item.id}`,
+      sku: item.sku,
+      productName: item.productName,
+      warehouseName: item.warehouseName,
+      type,
+      quantity:
+        type === 'Stock Out'
+          ? -Math.max(1, Math.round(item.reserved / 2))
+          : type === 'Adjustment'
+            ? item.available - item.reorderPoint
+            : Math.max(1, type === 'Reservation' ? item.reserved : Math.round(item.onHand * 0.08)),
+      reference: type === 'Reservation' ? 'PO-2026-0147' : type === 'Transfer' ? 'TRF-PP-SR-0826' : type === 'Return' ? 'RMA-2026-009' : `INV-${String(index + 410).padStart(4, '0')}`,
+      user: index % 3 === 0 ? 'Inventory Controller' : index % 3 === 1 ? 'Warehouse Lead' : 'Account Executive',
+      date: `2026-08-${String(18 - index).padStart(2, '0')}`,
+      status: 'Completed'
+    };
+  });
 
   const allocationRows = purchaseOrders.flatMap((po) =>
     (po.inventoryAllocations || []).map((allocation) => ({
@@ -88,7 +103,9 @@ export const AdminInventoryPage: React.FC = () => {
       row.sku.toLowerCase().includes(inventoryQuery) ||
       row.productName.toLowerCase().includes(inventoryQuery) ||
       row.warehouseName.toLowerCase().includes(inventoryQuery) ||
-      row.type.toLowerCase().includes(inventoryQuery)
+      row.type.toLowerCase().includes(inventoryQuery) ||
+      row.reference.toLowerCase().includes(inventoryQuery) ||
+      row.user.toLowerCase().includes(inventoryQuery)
   );
   const filteredAllocationRows = allocationRows.filter(
     (row) =>
@@ -196,8 +213,17 @@ export const AdminInventoryPage: React.FC = () => {
       align: 'right',
       accessor: (item) => (
         <div className="min-w-[120px]">
-          <div className="font-mono font-bold text-slate-900">{formatCurrency(item.available * item.unitCost)}</div>
-          <div className="text-[11px] text-slate-500">{formatCurrency(item.unitCost)} cost</div>
+          {canViewCostPrice ? (
+            <>
+              <div className="font-mono font-bold text-slate-900">{formatCurrency(item.available * item.unitCost)}</div>
+              <div className="text-[11px] text-slate-500">{formatCurrency(item.unitCost)} cost</div>
+            </>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-500">
+              <LockKeyhole className="h-3.5 w-3.5" />
+              Restricted
+            </div>
+          )}
         </div>
       )
     },
@@ -231,6 +257,8 @@ export const AdminInventoryPage: React.FC = () => {
     },
     { key: 'warehouse', header: 'Warehouse', accessor: (row) => <span className="text-slate-700">{row.warehouseName}</span> },
     { key: 'type', header: 'Movement Type', accessor: (row) => <span className="font-semibold text-slate-800">{row.type}</span> },
+    { key: 'reference', header: 'Reference', accessor: (row) => <span className="font-mono text-xs font-bold text-blue-700">{row.reference}</span> },
+    { key: 'user', header: 'User', accessor: (row) => <span className="text-xs font-semibold text-slate-700">{row.user}</span> },
     { key: 'qty', header: 'Qty Delta', align: 'right', accessor: (row) => <span className="font-mono font-bold text-slate-900">{row.quantity.toLocaleString()}</span> },
     { key: 'status', header: 'Status', accessor: (row) => <StatusBadge status={row.status} size="sm" /> }
   ];
@@ -258,6 +286,12 @@ export const AdminInventoryPage: React.FC = () => {
     },
     { key: 'requested', header: 'Requested', align: 'right', accessor: (row) => <span className="font-mono font-bold">{row.requestedQty.toLocaleString()}</span> },
     { key: 'allocated', header: 'Allocated', align: 'right', accessor: (row) => <span className="font-mono font-bold">{row.allocatedQty.toLocaleString()}</span> },
+    {
+      key: 'remaining',
+      header: 'Remaining',
+      align: 'right',
+      accessor: (row) => <span className="font-mono font-bold text-amber-700">{Math.max(0, row.requestedQty - row.allocatedQty).toLocaleString()}</span>
+    },
     { key: 'backorder', header: 'Backorder', align: 'right', accessor: (row) => <span className="font-mono font-bold text-rose-700">{row.backorderQty.toLocaleString()}</span> },
     { key: 'status', header: 'Status', accessor: (row) => <StatusBadge status={row.result} size="sm" /> }
   ];
@@ -275,7 +309,12 @@ export const AdminInventoryPage: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard title="On-Hand Units" value={totalOnHand.toLocaleString()} subtext={`${totalReserved.toLocaleString()} reserved`} icon={Boxes} />
-        <KPICard title="Inventory Value" value={formatCurrency(inventoryValue)} subtext="Available stock at cost" icon={DollarSign} />
+        <KPICard
+          title="Inventory Value"
+          value={canViewCostPrice ? formatCurrency(inventoryValue) : 'Restricted'}
+          subtext={canViewCostPrice ? 'Available stock at cost' : 'Cost price permission required'}
+          icon={canViewCostPrice ? DollarSign : LockKeyhole}
+        />
         <KPICard title="Low Stock" value={lowStockCount} subtext="At or below reorder point" icon={AlertTriangle} badge={lowStockCount ? 'Review' : undefined} badgeVariant="amber" />
         <KPICard title="Out of Stock" value={outOfStockCount} subtext="Available quantity is zero" icon={Warehouse} badge={outOfStockCount ? 'Action' : undefined} badgeVariant="danger" />
       </div>

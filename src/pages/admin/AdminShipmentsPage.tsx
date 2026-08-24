@@ -293,6 +293,73 @@ export const AdminShipmentsPage: React.FC = () => {
     }
   ];
 
+  const trackingColumns: Column<Shipment>[] = [
+    {
+      key: 'tracking',
+      header: 'Tracking Number',
+      accessor: (shipment) => (
+        <div className="min-w-[220px]">
+          <Link to={`/admin/shipments/${shipment.id}`} className="font-mono font-bold text-blue-700 hover:text-blue-900">
+            {shipment.trackingNumber}
+          </Link>
+          <div className="text-[11px] text-slate-500">{shipment.shipmentNumber || shipment.id.toUpperCase()}</div>
+        </div>
+      )
+    },
+    {
+      key: 'carrier',
+      header: 'Carrier / Service',
+      accessor: (shipment) => (
+        <div className="min-w-[200px]">
+          <div className="font-bold text-slate-900">{shipment.carrier}</div>
+          <div className="text-xs text-slate-500">{shipment.serviceLevel || 'Standard freight'}</div>
+        </div>
+      )
+    },
+    {
+      key: 'current',
+      header: 'Current Event',
+      accessor: (shipment) => {
+        const currentEvent = [...(shipment.timeline || [])].reverse().find((event) => event.active || event.completed) || shipment.timeline?.[0];
+
+        return (
+          <div className="min-w-[260px]">
+            <div className="font-bold text-slate-900">{currentEvent?.status || shipment.status}</div>
+            <div className="text-xs text-slate-500">{currentEvent?.location || shipment.originWarehouse || shipment.warehouseName}</div>
+            <div className="mt-1 text-[11px] text-slate-400">{currentEvent?.timestamp || shipment.dispatchDate || shipment.shipDate || 'Pending scan'}</div>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'eta',
+      header: 'ETA / Actual',
+      accessor: (shipment) => (
+        <div className="min-w-[150px] text-xs">
+          <div className="font-semibold text-slate-800">ETA {shipment.estimatedDelivery}</div>
+          <div className="text-slate-500">Actual {shipment.actualDelivery || 'Pending'}</div>
+        </div>
+      )
+    },
+    {
+      key: 'pod',
+      header: 'Proof of Delivery',
+      accessor: (shipment) => <StatusBadge status={shipment.proofOfDelivery?.status || (shipment.status === 'Delivered' ? 'Pending' : 'Not Required')} size="sm" />
+    },
+    { key: 'status', header: 'Shipment Status', accessor: (shipment) => <StatusBadge status={shipment.status} size="sm" /> },
+    {
+      key: 'actions',
+      header: 'Actions',
+      accessor: (shipment) => (
+        <Link to={`/admin/shipments/${shipment.id}`}>
+          <Button variant="outline" size="xs" icon={Eye}>
+            Track
+          </Button>
+        </Link>
+      )
+    }
+  ];
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -361,11 +428,16 @@ export const AdminShipmentsPage: React.FC = () => {
                     value: statusFilter,
                     onChange: setStatusFilter,
                     options: [
+                      { label: 'Planned', value: 'Planned' },
                       { label: 'Preparing', value: 'Preparing' },
                       { label: 'Ready', value: 'Ready' },
+                      { label: 'Shipped', value: 'Shipped' },
                       { label: 'Dispatched', value: 'Dispatched' },
                       { label: 'In Transit', value: 'In Transit' },
+                      { label: 'Partially Delivered', value: 'Partially Delivered' },
                       { label: 'Delivered', value: 'Delivered' },
+                      { label: 'Failed', value: 'Failed' },
+                      { label: 'Cancelled', value: 'Cancelled' },
                       { label: 'Delayed', value: 'Delayed' }
                     ]
                   }
@@ -381,6 +453,8 @@ export const AdminShipmentsPage: React.FC = () => {
 
           {activeTab === 'carriers' ? (
             <DataTable columns={carrierColumns} data={filteredCarriers} emptyMessage="No carriers match the current search." />
+          ) : activeTab === 'tracking' ? (
+            <DataTable columns={trackingColumns} data={filteredShipments} emptyMessage="No tracking records match the selected filters." />
           ) : (
             <DataTable columns={shipmentColumns} data={filteredShipments} emptyMessage="No shipments match the selected filters." />
           )}

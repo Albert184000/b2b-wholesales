@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Download,
   Eye,
   FileText,
   Globe2,
@@ -27,6 +28,7 @@ import {
   StatusBadge
 } from '../../components/ui';
 import { mockActivityLogs } from '../../data/mockData';
+import { useApp } from '../../context/AppContext';
 import { ActivityLog } from '../../types';
 
 type ActivityStatus = 'Successful' | 'Review' | 'Failed';
@@ -39,6 +41,10 @@ type ActivityLogRow = ActivityLog & {
   ipAddress: string;
   description: string;
   status: ActivityStatus;
+  date: string;
+  time: string;
+  oldValue?: ActivityLog['oldValue'];
+  newValue?: ActivityLog['newValue'];
 };
 
 const pageSize = 8;
@@ -55,6 +61,8 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'APP-2026-014',
     recordType: 'BuyerApplication',
     description: 'Approved Angkor Cloud Solutions as a Corporate buyer after document review.',
+    oldValue: { status: 'Under Review', buyerGroup: 'Pending', creditLimit: 0 },
+    newValue: { status: 'Approved', buyerGroup: 'Corporate', creditLimit: 120000 },
     ipAddress: '10.0.10.2',
     timestamp: '2026-08-18 09:30 AM'
   },
@@ -68,6 +76,8 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'RFQ-2026-103',
     recordType: 'RFQ',
     description: 'Moved printer fleet RFQ into sales review and assigned quotation owner.',
+    oldValue: { status: 'Submitted', assignedRep: 'Unassigned' },
+    newValue: { status: 'Under Review', assignedRep: 'David Chen' },
     ipAddress: '10.0.14.88',
     timestamp: '2026-08-18 10:12 AM'
   },
@@ -81,6 +91,8 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'PROD-006',
     recordType: 'Product',
     description: 'Activated Samsung PM9A3 enterprise SSD tier pricing after MOQ review.',
+    oldValue: { status: 'Draft', moq: 10 },
+    newValue: { status: 'Active', moq: 20 },
     ipAddress: '10.0.10.2',
     timestamp: '2026-08-18 01:45 PM'
   },
@@ -94,6 +106,8 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'QTE-2026-113',
     recordType: 'Quote',
     description: 'Requested manager approval for concession pricing on networking equipment.',
+    oldValue: { status: 'Negotiating', total: 98500 },
+    newValue: { status: 'Pending Manager Approval', total: 95800 },
     ipAddress: '10.0.12.45',
     timestamp: '2026-08-18 03:05 PM'
   },
@@ -107,6 +121,8 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'USR-UNKNOWN',
     recordType: 'Authentication',
     description: 'Blocked sign-in attempt after repeated invalid credentials.',
+    oldValue: { attempts: 4, lockout: false },
+    newValue: { attempts: 5, lockout: true },
     ipAddress: '203.176.132.22',
     timestamp: '2026-08-18 04:22 PM'
   },
@@ -120,6 +136,8 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'INV-2026-0112',
     recordType: 'Invoice',
     description: 'Recorded partial wire payment against ABC Technology invoice.',
+    oldValue: { paidAmount: 40000, balance: 22100 },
+    newValue: { paidAmount: 52000, balance: 10100 },
     ipAddress: '10.0.10.2',
     timestamp: '2026-08-18 05:14 PM'
   },
@@ -133,6 +151,8 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'SHP-2026-0041',
     recordType: 'Shipment',
     description: 'Prepared outbound pallet shipment from Phnom Penh Main Distribution Hub.',
+    oldValue: { status: 'Ready', carrier: 'Unassigned' },
+    newValue: { status: 'Preparing', carrier: 'DHL Freight' },
     ipAddress: '10.0.14.88',
     timestamp: '2026-08-19 08:40 AM'
   },
@@ -146,8 +166,130 @@ const supplementalActivityLogs: ActivityLog[] = [
     recordId: 'SETTINGS-CREDIT',
     recordType: 'Settings',
     description: 'Updated credit review reminder threshold for enterprise buyers.',
+    oldValue: { reminderDays: 21 },
+    newValue: { reminderDays: 14 },
     ipAddress: '10.0.10.2',
     timestamp: '2026-08-19 09:10 AM'
+  },
+  {
+    id: 'log-013',
+    userId: 'usr-adm-01',
+    userName: 'Un Somnang',
+    userRole: 'ADMIN',
+    action: 'USER_LOGIN',
+    module: 'AUTH',
+    recordId: 'usr-adm-01',
+    recordType: 'UserSession',
+    description: 'Super Admin signed in to the admin ERP workspace.',
+    oldValue: { session: 'none' },
+    newValue: { session: 'active' },
+    ipAddress: '10.0.10.2',
+    timestamp: '2026-08-19 09:15 AM'
+  },
+  {
+    id: 'log-014',
+    userId: 'usr-mgr-01',
+    userName: 'Marcus Vance',
+    userRole: 'SALES_MANAGER',
+    action: 'APPROVED_QUOTE',
+    module: 'QUOTES',
+    recordId: 'QTE-2026-113',
+    recordType: 'Quote',
+    description: 'Approved counter-offer pricing after margin and buyer history review.',
+    oldValue: { managerApprovalStatus: 'Pending', status: 'Pending Manager Approval' },
+    newValue: { managerApprovalStatus: 'Approved', status: 'Sent' },
+    ipAddress: '10.0.12.45',
+    timestamp: '2026-08-19 09:42 AM'
+  },
+  {
+    id: 'log-015',
+    userId: 'usr-mgr-01',
+    userName: 'Marcus Vance',
+    userRole: 'SALES_MANAGER',
+    action: 'APPROVED_PURCHASE_ORDER',
+    module: 'ORDERS',
+    recordId: 'PO-2026-0057',
+    recordType: 'PurchaseOrder',
+    description: 'Approved PO after credit and inventory validation passed.',
+    oldValue: { status: 'Pending Approval', approval: 'Under Review' },
+    newValue: { status: 'Approved', approval: 'Approved' },
+    ipAddress: '10.0.12.45',
+    timestamp: '2026-08-19 10:04 AM'
+  },
+  {
+    id: 'log-016',
+    userId: 'usr-rep-01',
+    userName: 'David Chen',
+    userRole: 'ACCOUNT_EXECUTIVE',
+    action: 'UPDATED_CONTRACT_TERMS',
+    module: 'CONTRACTS',
+    recordId: 'CTR-2026-0057',
+    recordType: 'Contract',
+    description: 'Updated contract renewal milestone and delivery terms after buyer review.',
+    oldValue: { renewalDate: '2027-08-01', deliveryTerms: 'Standard Freight' },
+    newValue: { renewalDate: '2027-07-15', deliveryTerms: 'Priority Freight' },
+    ipAddress: '10.0.14.88',
+    timestamp: '2026-08-19 10:31 AM'
+  },
+  {
+    id: 'log-017',
+    userId: 'usr-adm-01',
+    userName: 'Un Somnang',
+    userRole: 'ADMIN',
+    action: 'UPDATED_PRICE_TIER',
+    module: 'CATALOG',
+    recordId: 'PROD-001',
+    recordType: 'PriceTier',
+    description: 'Changed tier pricing for volume desktop purchases.',
+    oldValue: { minQty: 100, unitPrice: 1180 },
+    newValue: { minQty: 100, unitPrice: 1155 },
+    ipAddress: '10.0.10.2',
+    timestamp: '2026-08-19 11:08 AM'
+  },
+  {
+    id: 'log-018',
+    userId: 'usr-adm-01',
+    userName: 'Un Somnang',
+    userRole: 'ADMIN',
+    action: 'UPDATED_CREDIT_LIMIT',
+    module: 'FINANCE',
+    recordId: 'buyer-001',
+    recordType: 'CreditLimit',
+    description: 'Raised ABC Technology credit line after payment history review.',
+    oldValue: { creditLimit: 150000, availableCredit: 105000 },
+    newValue: { creditLimit: 175000, availableCredit: 130000 },
+    ipAddress: '10.0.10.2',
+    timestamp: '2026-08-19 11:30 AM'
+  },
+  {
+    id: 'log-019',
+    userId: 'usr-adm-01',
+    userName: 'Un Somnang',
+    userRole: 'ADMIN',
+    action: 'VOIDED_INVOICE',
+    module: 'FINANCE',
+    recordId: 'INV-2026-0108',
+    recordType: 'Invoice',
+    description: 'Voided duplicate invoice before payment reconciliation.',
+    oldValue: { status: 'Issued', balance: 14500 },
+    newValue: { status: 'Void', balance: 0 },
+    ipAddress: '10.0.10.2',
+    timestamp: '2026-08-19 12:05 PM'
+  },
+  {
+    id: 'log-020',
+    userId: 'usr-mgr-01',
+    userName: 'Marcus Vance',
+    userRole: 'SALES_MANAGER',
+    action: 'USER_LOGOUT',
+    module: 'AUTH',
+    recordId: 'usr-mgr-01',
+    recordType: 'UserSession',
+    description: 'Sales Manager ended active admin portal session.',
+    oldValue: { session: 'active' },
+    newValue: { session: 'closed' },
+    ipAddress: '10.0.12.45',
+    timestamp: '2026-08-19 12:44 PM'
   }
 ];
 
@@ -168,7 +310,11 @@ const normalizeLog = (log: ActivityLog): ActivityLogRow => {
     recordType: log.recordType || 'Record',
     ipAddress: log.ipAddress || 'N/A',
     description: log.description || log.details || 'Activity recorded.',
-    status
+    status,
+    date: log.timestamp.split(' ')[0],
+    time: log.timestamp.split(' ').slice(1).join(' ') || '00:00',
+    oldValue: log.oldValue,
+    newValue: log.newValue
   };
 };
 
@@ -192,6 +338,7 @@ const formatAction = (action: string) =>
     .join(' ');
 
 export const AdminActivityLogsPage: React.FC = () => {
+  const { showToast } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -281,6 +428,10 @@ export const AdminActivityLogsPage: React.FC = () => {
     setStatusFilter('ALL');
   };
 
+  const handleExport = (format: 'CSV' | 'PDF') => {
+    showToast(`Activity log ${format} export queued for ${filteredLogs.length} filtered entries.`, 'success');
+  };
+
   const successfulCount = logs.filter((log) => log.status === 'Successful').length;
   const reviewCount = logs.filter((log) => log.status === 'Review').length;
   const failedCount = logs.filter((log) => log.status === 'Failed').length;
@@ -288,9 +439,14 @@ export const AdminActivityLogsPage: React.FC = () => {
 
   const columns: Column<ActivityLogRow>[] = [
     {
-      key: 'timestamp',
-      header: 'Timestamp',
-      accessor: (log) => <span className="whitespace-nowrap font-mono text-xs text-slate-600">{log.timestamp}</span>
+      key: 'date',
+      header: 'Date',
+      accessor: (log) => <span className="whitespace-nowrap font-mono text-xs text-slate-600">{log.date}</span>
+    },
+    {
+      key: 'time',
+      header: 'Time',
+      accessor: (log) => <span className="whitespace-nowrap font-mono text-xs text-slate-600">{log.time}</span>
     },
     {
       key: 'user',
@@ -392,6 +548,16 @@ export const AdminActivityLogsPage: React.FC = () => {
           { label: 'Admin Portal', href: '/admin/dashboard' },
           { label: 'Activity Logs' }
         ]}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" icon={Download} onClick={() => handleExport('CSV')}>
+              Export CSV
+            </Button>
+            <Button type="button" variant="outline" size="sm" icon={Download} onClick={() => handleExport('PDF')}>
+              Export PDF
+            </Button>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -561,6 +727,42 @@ export const AdminActivityLogsPage: React.FC = () => {
               <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-700">
                 {selectedLog.description}
               </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-rose-100 bg-rose-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-rose-700">Old Value</div>
+                <div className="mt-3 space-y-2 text-xs">
+                  {selectedLog.oldValue ? (
+                    Object.entries(selectedLog.oldValue).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2">
+                        <span className="font-bold text-slate-500">{key}</span>
+                        <span className="min-w-0 truncate font-mono font-semibold text-slate-900">{String(value)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-rose-200 bg-white px-3 py-4 text-rose-700">
+                      No previous value captured.
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-emerald-700">New Value</div>
+                <div className="mt-3 space-y-2 text-xs">
+                  {selectedLog.newValue ? (
+                    Object.entries(selectedLog.newValue).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2">
+                        <span className="font-bold text-slate-500">{key}</span>
+                        <span className="min-w-0 truncate font-mono font-semibold text-slate-900">{String(value)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-emerald-200 bg-white px-3 py-4 text-emerald-700">
+                      No replacement value captured.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex justify-end">
               <Button type="button" variant="outline" size="sm" icon={XCircle} onClick={() => setSelectedLog(null)}>

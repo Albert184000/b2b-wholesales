@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CreditCard, DollarSign, CheckCircle2, Edit, Save } from 'lucide-react';
+import { AlertTriangle, CreditCard, DollarSign, CheckCircle2, Edit, Save } from 'lucide-react';
 import {
   Button,
   DataTable,
@@ -21,11 +21,15 @@ export const AdminCreditPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBuyer, setSelectedBuyer] = useState<Buyer | null>(null);
   const [creditLimit, setCreditLimit] = useState(0);
+  const [newPOAmount, setNewPOAmount] = useState(25000);
   const [creditNote, setCreditNote] = useState('Credit facility reviewed against current payment history and order pipeline.');
 
   const totalFacility = buyers.reduce((sum, b) => sum + b.creditLimit, 0);
   const totalUsed = buyers.reduce((sum, b) => sum + b.usedCredit, 0);
   const totalAvailable = buyers.reduce((sum, b) => sum + b.availableCredit, 0);
+  const projectedCreditUsage = (selectedBuyer?.usedCredit || 0) + newPOAmount;
+  const projectedCreditAvailable = Math.max(0, creditLimit - projectedCreditUsage);
+  const creditApprovalRequired = Boolean(selectedBuyer && projectedCreditUsage > creditLimit);
 
   const filteredBuyers = buyers.filter((b) =>
     b.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -35,6 +39,7 @@ export const AdminCreditPage: React.FC = () => {
   const openCreditModal = (buyer: Buyer) => {
     setSelectedBuyer(buyer);
     setCreditLimit(buyer.creditLimit);
+    setNewPOAmount(25000);
     setCreditNote('Credit facility reviewed against current payment history and order pipeline.');
   };
 
@@ -190,6 +195,28 @@ export const AdminCreditPage: React.FC = () => {
               </div>
             </div>
           </div>
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-blue-50/70 p-4 text-sm sm:grid-cols-4">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-blue-700">Payment Terms</div>
+              <div className="mt-1 font-semibold text-slate-900">{selectedBuyer?.paymentTerms || 'Net-30'}</div>
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-blue-700">Used + New PO</div>
+              <div className="mt-1 font-mono font-bold text-slate-900">${projectedCreditUsage.toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-blue-700">Projected Headroom</div>
+              <div className={`mt-1 font-mono font-bold ${creditApprovalRequired ? 'text-rose-700' : 'text-emerald-700'}`}>
+                ${projectedCreditAvailable.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wide text-blue-700">Validation</div>
+              <div className="mt-1">
+                <StatusBadge status={creditApprovalRequired ? 'Approval Required' : 'Within Limit'} size="sm" />
+              </div>
+            </div>
+          </div>
           <Input
             label="Approved Credit Facility"
             type="number"
@@ -198,6 +225,26 @@ export const AdminCreditPage: React.FC = () => {
             value={creditLimit}
             onChange={(event) => setCreditLimit(parseInt(event.target.value, 10) || 0)}
           />
+          <Input
+            label="Mock New PO Amount"
+            type="number"
+            min={0}
+            prefixText="$"
+            value={newPOAmount}
+            onChange={(event) => setNewPOAmount(parseInt(event.target.value, 10) || 0)}
+            helperText="Validates whether Used Credit + New PO exceeds the approved limit."
+          />
+          {creditApprovalRequired && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <div className="font-bold">Credit approval required</div>
+                <p className="mt-1 leading-6">
+                  Used Credit + New PO exceeds the proposed credit limit. Route this order through credit approval before PO release.
+                </p>
+              </div>
+            </div>
+          )}
           <Textarea
             label="Internal Credit Note"
             value={creditNote}

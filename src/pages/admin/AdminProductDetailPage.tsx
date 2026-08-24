@@ -77,6 +77,33 @@ export const AdminProductDetailPage: React.FC = () => {
     showToast(`${product.sku} ${nextStatus === 'Active' ? 'reactivated' : 'deactivated'} in admin catalog.`, nextStatus === 'Active' ? 'success' : 'warning');
   };
 
+  const pricingPriorityPreview = [
+    {
+      label: 'Contract Price',
+      value: formatCurrency(product.basePrice * 0.78, product.currency),
+      status: 'Highest Priority',
+      note: 'Applied for active buyer contracts tied to this SKU.'
+    },
+    {
+      label: 'Buyer Group Price',
+      value: formatCurrency(product.basePrice * 0.88, product.currency),
+      status: 'Fallback',
+      note: 'Used when buyer group-specific pricing exists.'
+    },
+    {
+      label: 'Tier Price',
+      value: formatCurrency(priceEstimate?.unitPrice || product.tierPricing[0]?.unitPrice || product.basePrice, product.currency),
+      status: 'Quantity Match',
+      note: 'Resolved by quantity once MOQ is satisfied.'
+    },
+    {
+      label: 'Base Wholesale Price',
+      value: formatCurrency(product.basePrice, product.currency),
+      status: 'Default',
+      note: 'Used when no contract, group, or tier price applies.'
+    }
+  ];
+
   const tierColumns: Column<TierPrice>[] = [
     {
       key: 'label',
@@ -96,6 +123,16 @@ export const AdminProductDetailPage: React.FC = () => {
         <span className="font-mono text-sm font-bold text-slate-900">
           {formatCurrency(tier.unitPrice, product.currency)}
         </span>
+      )
+    },
+    {
+      key: 'effective',
+      header: 'Effective',
+      accessor: (tier) => (
+        <div className="min-w-[120px] text-xs">
+          <div className="font-semibold text-slate-800">{tier.effectiveDate || 'Immediate'}</div>
+          <StatusBadge status={tier.status || 'Active'} size="sm" />
+        </div>
       )
     },
     {
@@ -277,10 +314,41 @@ export const AdminProductDetailPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+              <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">MOQ Validation</div>
+                <div className="mt-2 grid gap-2 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-mono text-slate-600">{Math.max(1, product.moq - 1).toLocaleString()} {product.unit}</span>
+                    <StatusBadge status="Invalid Below MOQ" size="sm" showDot={false} />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-mono text-slate-600">{product.moq.toLocaleString()}+ {product.unit}</span>
+                    <StatusBadge status="Valid" size="sm" showDot={false} />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </Card>
       </div>
+
+      <Card title="Pricing Priority" subtitle="Mock pricing resolution shown in the same order used by buyer-facing price previews.">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+          {pricingPriorityPreview.map((step, index) => (
+            <div key={step.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-700 text-xs font-black text-white">
+                  {index + 1}
+                </div>
+                <StatusBadge status={step.status} size="sm" showDot={false} />
+              </div>
+              <div className="mt-3 text-sm font-bold text-slate-900">{step.label}</div>
+              <div className="mt-1 font-mono text-lg font-extrabold text-blue-700">{step.value}</div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">{step.note}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card title="Wholesale Tier Schedule">
