@@ -1,16 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, CreditCard, Eye, FileMinus, Receipt, Search } from 'lucide-react';
+import { CheckCircle2, CreditCard, Edit, Eye, FileMinus, Plus, Receipt, Save, Search, Trash2 } from 'lucide-react';
 import {
   Button,
   Card,
   Column,
   DataTable,
   FilterBar,
+  Input,
   KPICard,
+  Modal,
   PageHeader,
   SearchBar,
-  StatusBadge
+  Select,
+  StatusBadge,
+  Textarea
 } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
 import { Invoice, Payment } from '../../types';
@@ -20,9 +24,39 @@ import { formatCurrency } from '../../utils/pricing';
 interface PaymentRow extends Payment {
   buyerName?: string;
   invoiceNumber?: string;
+  isManual?: boolean;
 }
 
-const creditNotes = [
+interface CreditNoteRow {
+  id: string;
+  invoiceNumber: string;
+  buyerName: string;
+  reason: string;
+  amount: number;
+  status: string;
+  date: string;
+}
+
+interface PaymentDraft {
+  invoiceId: string;
+  date: string;
+  method: string;
+  amount: string;
+  reference: string;
+  status: string;
+}
+
+interface CreditNoteDraft {
+  id: string;
+  invoiceId: string;
+  reason: string;
+  amount: string;
+  status: string;
+}
+
+const today = () => new Date().toISOString().split('T')[0];
+
+const initialCreditNotes: CreditNoteRow[] = [
   {
     id: 'CN-2026-004',
     invoiceNumber: 'INV-2026-0108',
@@ -43,12 +77,37 @@ const creditNotes = [
   }
 ];
 
+const createPaymentDraft = (invoiceId = ''): PaymentDraft => ({
+  invoiceId,
+  date: today(),
+  method: 'Bank Transfer',
+  amount: '',
+  reference: `PAY-${Date.now()}`,
+  status: 'Completed'
+});
+
+const createCreditNoteDraft = (invoiceId = ''): CreditNoteDraft => ({
+  id: `CN-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
+  invoiceId,
+  reason: '',
+  amount: '',
+  status: 'Pending Approval'
+});
+
 export const AdminInvoicesPage: React.FC = () => {
   const { invoices, updateInvoiceStatus, showToast } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'invoices';
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [manualPayments, setManualPayments] = useState<PaymentRow[]>([]);
+  const [creditNoteRows, setCreditNoteRows] = useState<CreditNoteRow[]>(initialCreditNotes);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [paymentDraft, setPaymentDraft] = useState<PaymentDraft>(() => createPaymentDraft(invoices[0]?.id || ''));
+  const [creditNoteModalOpen, setCreditNoteModalOpen] = useState(false);
+  const [editingCreditNoteId, setEditingCreditNoteId] = useState<string | null>(null);
+  const [creditNoteDraft, setCreditNoteDraft] = useState<CreditNoteDraft>(() => createCreditNoteDraft(invoices[0]?.id || ''));
 
   const invoiceTotal = invoices.reduce((sum, invoice) => sum + getInvoiceTotal(invoice), 0);
   const paidTotal = invoices.reduce((sum, invoice) => sum + getInvoicePaidAmount(invoice), 0);
@@ -57,14 +116,18 @@ export const AdminInvoicesPage: React.FC = () => {
 
   const paymentRows: PaymentRow[] = useMemo(
     () =>
-      invoices.flatMap((invoice) =>
-        (invoice.payments || []).map((payment) => ({
-          ...payment,
-          buyerName: invoice.companyName || invoice.buyerName,
-          invoiceNumber: invoice.invoiceNumber || invoice.id
-        }))
-      ),
-    [invoices]
+      [
+        ...manualPayments,
+        ...invoices.flatMap((invoice) =>
+          (invoice.payments || []).map((payment) => ({
+            ...payment,
+            buyerName: invoice.companyName || invoice.buyerName,
+            invoiceNumber: invoice.invoiceNumber || invoice.id,
+            isManual: false
+          }))
+        )
+      ],
+    [invoices, manualPayments]
   );
 
   const filteredInvoices = invoices.filter((invoice) => {
@@ -89,7 +152,7 @@ export const AdminInvoicesPage: React.FC = () => {
     );
   });
 
-  const filteredCreditNotes = creditNotes.filter((note) => {
+  const filteredCreditNotes = creditNoteRows.filter((note) => {
     const query = searchTerm.trim().toLowerCase();
     return (
       query === '' ||
@@ -99,6 +162,124 @@ export const AdminInvoicesPage: React.FC = () => {
       note.reason.toLowerCase().includes(query)
     );
   });
+
+  const openPaymentModal = (payment?: PaymentRow, invoiceId?: string) => {
+    if (payment) {
+      setEditingPaymentId(payment.id);
+      const invoice = invoices.find((item) => (item.invoiceNumber || item.id) === payment.invoiceNumber || item.id === payment.invoiceId);
+      setPaymentDraft({
+        invoiceId: invoice?.id || payment.invoiceId,
+        date: payment.date,
+        method: payment.method,
+        amount: String(payment.amount),
+        reference: payment.reference,
+        status: payment.status
+      });
+    } else {
+      setEditingPaymentId(null);
+      setPaymentDraft(createPaymentDraft(invoiceId || invoices[0]?.id || ''));
+    }
+    setPaymentModalOpen(true);
+  };
+
+  const savePayment = (event: React.FormEvent) => {
+    event.preventDefault();
+    const invoice = invoices.find((item) => item.id === paymentDraft.invoiceId);
+    const amount = Number(paymentDraft.amount);
+
+    if (!invoice || !Number.isFinite(amount) || amount <= 0) {
+      showToast('Select an invoice and enter a valid payment amount.', 'error');
+      return;
+    }
+
+    const buyerName = invoice.companyName || invoice.buyerName || 'Unassigned buyer';
+    const invoiceNumber = invoice.invoiceNumber || invoice.id;
+    const paymentRecord: PaymentRow = {
+      id: editingPaymentId || `pay-${Date.now()}`,
+      paymentId: editingPaymentId || `PAY-${Date.now()}`,
+      invoiceId: invoice.id,
+      invoiceNumber,
+      buyerName,
+      date: paymentDraft.date,
+      method: paymentDraft.method,
+      amount,
+      reference: paymentDraft.reference.trim() || `PAY-${invoiceNumber}`,
+      status: paymentDraft.status,
+      isManual: true
+    };
+
+    setManualPayments((current) =>
+      editingPaymentId
+        ? current.map((payment) => (payment.id === editingPaymentId ? paymentRecord : payment))
+        : [paymentRecord, ...current]
+    );
+
+    if (!editingPaymentId && paymentRecord.status === 'Completed') {
+      const paidAmount = getInvoicePaidAmount(invoice) + amount;
+      const nextStatus = paidAmount >= getInvoiceTotal(invoice) ? 'Paid' : 'Partially Paid';
+      updateInvoiceStatus(invoice.id, nextStatus, paidAmount);
+    }
+
+    setPaymentModalOpen(false);
+    showToast(`${paymentRecord.paymentId} saved for ${invoiceNumber}.`, 'success');
+  };
+
+  const deletePayment = (payment: PaymentRow) => {
+    setManualPayments((current) => current.filter((item) => item.id !== payment.id));
+    showToast(`${payment.paymentId || payment.id} removed from payment ledger.`, 'warning');
+  };
+
+  const openCreditNoteModal = (note?: CreditNoteRow) => {
+    if (note) {
+      const invoice = invoices.find((item) => (item.invoiceNumber || item.id) === note.invoiceNumber);
+      setEditingCreditNoteId(note.id);
+      setCreditNoteDraft({
+        id: note.id,
+        invoiceId: invoice?.id || invoices[0]?.id || '',
+        reason: note.reason,
+        amount: String(note.amount),
+        status: note.status
+      });
+    } else {
+      setEditingCreditNoteId(null);
+      setCreditNoteDraft(createCreditNoteDraft(invoices[0]?.id || ''));
+    }
+    setCreditNoteModalOpen(true);
+  };
+
+  const saveCreditNote = (event: React.FormEvent) => {
+    event.preventDefault();
+    const invoice = invoices.find((item) => item.id === creditNoteDraft.invoiceId);
+    const amount = Number(creditNoteDraft.amount);
+
+    if (!invoice || !creditNoteDraft.reason.trim() || !Number.isFinite(amount) || amount <= 0) {
+      showToast('Select an invoice, reason, and valid credit amount.', 'error');
+      return;
+    }
+
+    const noteRecord: CreditNoteRow = {
+      id: creditNoteDraft.id.trim() || `CN-${Date.now()}`,
+      invoiceNumber: invoice.invoiceNumber || invoice.id,
+      buyerName: invoice.companyName || invoice.buyerName || 'Unassigned buyer',
+      reason: creditNoteDraft.reason.trim(),
+      amount,
+      status: creditNoteDraft.status,
+      date: today()
+    };
+
+    setCreditNoteRows((current) =>
+      editingCreditNoteId
+        ? current.map((note) => (note.id === editingCreditNoteId ? noteRecord : note))
+        : [noteRecord, ...current]
+    );
+    setCreditNoteModalOpen(false);
+    showToast(`${noteRecord.id} saved for ${noteRecord.invoiceNumber}.`, 'success');
+  };
+
+  const deleteCreditNote = (note: CreditNoteRow) => {
+    setCreditNoteRows((current) => current.filter((item) => item.id !== note.id));
+    showToast(`${note.id} removed from credit notes.`, 'warning');
+  };
 
   const invoiceColumns: Column<Invoice>[] = [
     {
@@ -187,17 +368,49 @@ export const AdminInvoicesPage: React.FC = () => {
     { key: 'invoice', header: 'Invoice', accessor: (payment) => <span className="font-mono font-semibold text-slate-800">{payment.invoiceNumber}</span> },
     { key: 'buyer', header: 'Buyer', accessor: (payment) => <span className="font-semibold text-slate-900">{payment.buyerName}</span> },
     { key: 'date', header: 'Date', accessor: (payment) => <span className="text-slate-700">{payment.date}</span> },
+    { key: 'method', header: 'Method', accessor: (payment) => <span className="text-slate-700">{payment.method}</span> },
     { key: 'amount', header: 'Amount', align: 'right', accessor: (payment) => <span className="font-mono font-bold text-slate-900">{formatCurrency(payment.amount)}</span> },
-    { key: 'status', header: 'Status', accessor: (payment) => <StatusBadge status={payment.status} size="sm" /> }
+    { key: 'status', header: 'Status', accessor: (payment) => <StatusBadge status={payment.status} size="sm" /> },
+    {
+      key: 'actions',
+      header: 'Actions',
+      accessor: (payment) =>
+        payment.isManual ? (
+          <div className="flex min-w-[130px] flex-wrap items-center gap-1.5">
+            <Button variant="outline" size="xs" icon={Edit} onClick={() => openPaymentModal(payment)}>
+              Edit
+            </Button>
+            <Button variant="ghost" size="xs" icon={Trash2} onClick={() => deletePayment(payment)}>
+              Delete
+            </Button>
+          </div>
+        ) : (
+          <StatusBadge status="Posted" size="sm" showDot={false} />
+        )
+    }
   ];
 
-  const creditColumns: Column<(typeof creditNotes)[number]>[] = [
+  const creditColumns: Column<CreditNoteRow>[] = [
     { key: 'note', header: 'Credit Note', accessor: (note) => <span className="font-mono font-bold text-blue-700">{note.id}</span> },
     { key: 'invoice', header: 'Invoice', accessor: (note) => <span className="font-mono text-slate-800">{note.invoiceNumber}</span> },
     { key: 'buyer', header: 'Buyer', accessor: (note) => <span className="font-semibold text-slate-900">{note.buyerName}</span> },
     { key: 'reason', header: 'Reason', accessor: (note) => <span className="text-slate-700">{note.reason}</span> },
     { key: 'amount', header: 'Amount', align: 'right', accessor: (note) => <span className="font-mono font-bold text-slate-900">{formatCurrency(note.amount)}</span> },
-    { key: 'status', header: 'Status', accessor: (note) => <StatusBadge status={note.status} size="sm" /> }
+    { key: 'status', header: 'Status', accessor: (note) => <StatusBadge status={note.status} size="sm" /> },
+    {
+      key: 'actions',
+      header: 'Actions',
+      accessor: (note) => (
+        <div className="flex min-w-[130px] flex-wrap items-center gap-1.5">
+          <Button variant="outline" size="xs" icon={Edit} onClick={() => openCreditNoteModal(note)}>
+            Edit
+          </Button>
+          <Button variant="ghost" size="xs" icon={Trash2} onClick={() => deleteCreditNote(note)}>
+            Delete
+          </Button>
+        </div>
+      )
+    }
   ];
 
   return (
@@ -239,7 +452,21 @@ export const AdminInvoicesPage: React.FC = () => {
         })}
       </div>
 
-      <Card className="border-slate-200" noPadding>
+      <Card
+        className="border-slate-200"
+        noPadding
+        action={
+          activeTab === 'payments' ? (
+            <Button variant="primary" size="sm" icon={Plus} onClick={() => openPaymentModal()}>
+              Record Payment
+            </Button>
+          ) : activeTab === 'credit-notes' ? (
+            <Button variant="primary" size="sm" icon={Plus} onClick={() => openCreditNoteModal()}>
+              Create Credit Note
+            </Button>
+          ) : null
+        }
+      >
         <div className="space-y-4 p-4">
           <div className="flex flex-col gap-3 lg:flex-row">
             <div className="flex-1">
@@ -284,6 +511,146 @@ export const AdminInvoicesPage: React.FC = () => {
           )}
         </div>
       </Card>
+
+      <Modal
+        isOpen={paymentModalOpen}
+        onClose={() => setPaymentModalOpen(false)}
+        title={editingPaymentId ? 'Edit Payment' : 'Record Payment'}
+        subtitle="Capture buyer payment details for finance reconciliation."
+      >
+        <form onSubmit={savePayment} className="space-y-4">
+          <Select
+            label="Invoice"
+            required
+            value={paymentDraft.invoiceId}
+            onChange={(event) => setPaymentDraft((draft) => ({ ...draft, invoiceId: event.target.value }))}
+            options={invoices.map((invoice) => ({
+              label: `${invoice.invoiceNumber || invoice.id} - ${invoice.companyName || invoice.buyerName}`,
+              value: invoice.id
+            }))}
+          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Payment Date"
+              type="date"
+              required
+              value={paymentDraft.date}
+              onChange={(event) => setPaymentDraft((draft) => ({ ...draft, date: event.target.value }))}
+            />
+            <Input
+              label="Amount"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={paymentDraft.amount}
+              onChange={(event) => setPaymentDraft((draft) => ({ ...draft, amount: event.target.value }))}
+              prefixText="$"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Select
+              label="Method"
+              value={paymentDraft.method}
+              onChange={(event) => setPaymentDraft((draft) => ({ ...draft, method: event.target.value }))}
+              options={[
+                { label: 'Bank Transfer', value: 'Bank Transfer' },
+                { label: 'Corporate Card', value: 'Corporate Card' },
+                { label: 'ACH', value: 'ACH' },
+                { label: 'Cashier Check', value: 'Cashier Check' }
+              ]}
+            />
+            <Select
+              label="Status"
+              value={paymentDraft.status}
+              onChange={(event) => setPaymentDraft((draft) => ({ ...draft, status: event.target.value }))}
+              options={[
+                { label: 'Completed', value: 'Completed' },
+                { label: 'Pending', value: 'Pending' },
+                { label: 'Failed', value: 'Failed' },
+                { label: 'Reversed', value: 'Reversed' }
+              ]}
+            />
+          </div>
+          <Input
+            label="Reference"
+            required
+            value={paymentDraft.reference}
+            onChange={(event) => setPaymentDraft((draft) => ({ ...draft, reference: event.target.value }))}
+          />
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => setPaymentModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" icon={Save}>
+              Save Payment
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={creditNoteModalOpen}
+        onClose={() => setCreditNoteModalOpen(false)}
+        title={editingCreditNoteId ? 'Edit Credit Note' : 'Create Credit Note'}
+        subtitle="Issue freight, damage, tax, or commercial adjustment credits."
+      >
+        <form onSubmit={saveCreditNote} className="space-y-4">
+          <Input
+            label="Credit Note ID"
+            required
+            value={creditNoteDraft.id}
+            onChange={(event) => setCreditNoteDraft((draft) => ({ ...draft, id: event.target.value }))}
+          />
+          <Select
+            label="Invoice"
+            required
+            value={creditNoteDraft.invoiceId}
+            onChange={(event) => setCreditNoteDraft((draft) => ({ ...draft, invoiceId: event.target.value }))}
+            options={invoices.map((invoice) => ({
+              label: `${invoice.invoiceNumber || invoice.id} - ${invoice.companyName || invoice.buyerName}`,
+              value: invoice.id
+            }))}
+          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Amount"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={creditNoteDraft.amount}
+              onChange={(event) => setCreditNoteDraft((draft) => ({ ...draft, amount: event.target.value }))}
+              prefixText="$"
+            />
+            <Select
+              label="Status"
+              value={creditNoteDraft.status}
+              onChange={(event) => setCreditNoteDraft((draft) => ({ ...draft, status: event.target.value }))}
+              options={[
+                { label: 'Pending Approval', value: 'Pending Approval' },
+                { label: 'Issued', value: 'Issued' },
+                { label: 'Rejected', value: 'Rejected' }
+              ]}
+            />
+          </div>
+          <Textarea
+            label="Reason"
+            required
+            rows={3}
+            value={creditNoteDraft.reason}
+            onChange={(event) => setCreditNoteDraft((draft) => ({ ...draft, reason: event.target.value }))}
+          />
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => setCreditNoteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" icon={Save}>
+              Save Credit Note
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

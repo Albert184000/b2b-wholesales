@@ -7,6 +7,7 @@ import {
   DollarSign,
   Edit,
   Layers,
+  LockKeyhole,
   Package,
   Warehouse
 } from 'lucide-react';
@@ -23,6 +24,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { InventoryItem, TierPrice } from '../../types';
 import { formatCurrency, formatTierRange, getOrderEstimate } from '../../utils/pricing';
+import { hasPermission } from '../../utils/rbac';
 
 const getStockStatus = (available: number, reorderPoint: number) => {
   if (available <= 0) return 'Out of Stock';
@@ -32,10 +34,11 @@ const getStockStatus = (available: number, reorderPoint: number) => {
 
 export const AdminProductDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { products, inventory, updateProductStatus, showToast } = useApp();
+  const { currentUser, products, inventory, updateProductStatus, showToast } = useApp();
   const product = products.find((item) => item.id === id);
   const productInventory = inventory.filter((item) => item.productId === id);
   const [previewQty, setPreviewQty] = useState(product?.moq || 1);
+  const canViewCostPrice = hasPermission(currentUser.role, 'products.view_cost_price');
 
   const priceEstimate = useMemo(
     () => (product ? getOrderEstimate(product, previewQty) : undefined),
@@ -47,7 +50,7 @@ export const AdminProductDetailPage: React.FC = () => {
       <div className="space-y-6">
         <PageHeader
           title="Product Not Found"
-          subtitle="The requested product record is not available in the current admin mock data."
+          subtitle="The requested product record is not available in the current admin catalog."
           breadcrumbs={[
             { label: 'Products', href: '/admin/products' },
             { label: 'Not Found' }
@@ -178,7 +181,12 @@ export const AdminProductDetailPage: React.FC = () => {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KPICard title="Base Price" value={formatCurrency(product.basePrice, product.currency)} subtext={`${marginPercent}% estimated margin`} icon={DollarSign} />
+        <KPICard
+          title="Base Price"
+          value={formatCurrency(product.basePrice, product.currency)}
+          subtext={canViewCostPrice ? `${marginPercent}% estimated margin` : 'Cost price restricted for this role'}
+          icon={DollarSign}
+        />
         <KPICard title="MOQ" value={`${product.moq} ${product.unit}`} subtext="Minimum order quantity" icon={Package} />
         <KPICard title="Available Stock" value={product.availableStock.toLocaleString()} subtext={`${product.reservedStock.toLocaleString()} reserved`} icon={Warehouse} />
         <KPICard title="Catalog Status" value={product.status} subtext={stockStatus} icon={Layers} />
@@ -218,6 +226,19 @@ export const AdminProductDetailPage: React.FC = () => {
                 <div>
                   <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Reorder Point</div>
                   <div className="mt-1 font-mono font-semibold text-slate-900">{product.reorderPoint.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Cost Price</div>
+                  {canViewCostPrice ? (
+                    <div className="mt-1 font-mono font-semibold text-slate-900">
+                      {formatCurrency(product.costPrice, product.currency)}
+                    </div>
+                  ) : (
+                    <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-500">
+                      <LockKeyhole className="h-3.5 w-3.5" />
+                      Restricted
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

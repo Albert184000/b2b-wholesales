@@ -364,7 +364,7 @@ export const AdminInventoryPage: React.FC = () => {
           isOpen={Boolean(adjustModalItem)}
           onClose={() => setAdjustModalItem(null)}
           title={`Adjust ${adjustModalItem.sku}`}
-          subtitle="Mock inventory adjustment. No backend transaction is created."
+          subtitle="Inventory adjustment for on-hand and reserved stock review."
           size="md"
         >
           <form onSubmit={handleAdjustSubmit} className="space-y-4">

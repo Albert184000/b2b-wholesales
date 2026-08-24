@@ -64,7 +64,7 @@ export const AdminPurchaseOrderDetailPage: React.FC = () => {
       <div className="space-y-6">
         <PageHeader
           title="Order Not Found"
-          subtitle="The requested purchase order is not available in the current mock data."
+          subtitle="The requested purchase order is not available in the current order workspace."
           breadcrumbs={[
             { label: 'Orders', href: '/admin/purchase-orders' },
             { label: 'Not Found' }

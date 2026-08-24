@@ -17,7 +17,6 @@ import {
   DataTable,
   EmptyState,
   FilterBar,
-  Input,
   KPICard,
   PageHeader,
   Pagination,
@@ -35,6 +34,7 @@ export const AdminApprovalsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [countryFilter, setCountryFilter] = useState('ALL');
   const [submittedFrom, setSubmittedFrom] = useState('');
+  const [submittedTo, setSubmittedTo] = useState('');
   const [reviewerFilter, setReviewerFilter] = useState('ALL');
   const [documentFilter, setDocumentFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -77,13 +77,14 @@ export const AdminApprovalsPage: React.FC = () => {
       const matchesSearch = !normalizedSearch || searchable.includes(normalizedSearch);
       const matchesStatus = statusFilter === 'ALL' || application.status === statusFilter;
       const matchesCountry = countryFilter === 'ALL' || application.country === countryFilter;
-      const matchesDate = !submittedFrom || application.submittedDate >= submittedFrom;
+      const matchesDateFrom = !submittedFrom || application.submittedDate >= submittedFrom;
+      const matchesDateTo = !submittedTo || application.submittedDate <= submittedTo;
       const matchesReviewer = reviewerFilter === 'ALL' || application.assignedReviewer === reviewerFilter;
       const matchesDocuments = documentFilter === 'ALL' || application.documentStatus === documentFilter;
 
-      return matchesSearch && matchesStatus && matchesCountry && matchesDate && matchesReviewer && matchesDocuments;
+      return matchesSearch && matchesStatus && matchesCountry && matchesDateFrom && matchesDateTo && matchesReviewer && matchesDocuments;
     });
-  }, [buyerApplications, countryFilter, documentFilter, reviewerFilter, searchTerm, statusFilter, submittedFrom]);
+  }, [buyerApplications, countryFilter, documentFilter, reviewerFilter, searchTerm, statusFilter, submittedFrom, submittedTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredApplications.length / pageSize));
   const currentPageSafe = Math.min(currentPage, totalPages);
@@ -96,6 +97,7 @@ export const AdminApprovalsPage: React.FC = () => {
     statusFilter !== 'ALL' ||
     countryFilter !== 'ALL' ||
     submittedFrom !== '' ||
+    submittedTo !== '' ||
     reviewerFilter !== 'ALL' ||
     documentFilter !== 'ALL';
 
@@ -104,6 +106,7 @@ export const AdminApprovalsPage: React.FC = () => {
     setStatusFilter('ALL');
     setCountryFilter('ALL');
     setSubmittedFrom('');
+    setSubmittedTo('');
     setReviewerFilter('ALL');
     setDocumentFilter('ALL');
     setCurrentPage(1);
@@ -203,27 +206,60 @@ export const AdminApprovalsPage: React.FC = () => {
 
       <Card className="border-slate-200" noPadding>
         <div className="space-y-4 p-4">
-          <div className="flex flex-col gap-3 xl:flex-row">
-            <div className="min-w-0 flex-1">
+          <div className="approval-toolbar grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(320px,2fr)_minmax(170px,1fr)_minmax(170px,1fr)_auto] xl:items-end">
+            <div className="search-field min-w-0">
+              <label htmlFor="approval-search" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                Search applications
+              </label>
               <SearchBar
+                id="approval-search"
                 value={searchTerm}
                 onChange={(value) => {
                   setSearchTerm(value);
                   setCurrentPage(1);
                 }}
                 placeholder="Search application, company, contact, registration, or tax ID..."
+                className="w-full"
               />
             </div>
-            <Input
-              label="Submitted From"
-              type="date"
-              value={submittedFrom}
-              onChange={(event) => {
-                setSubmittedFrom(event.target.value);
-                setCurrentPage(1);
-              }}
-              className="xl:min-w-[170px]"
-            />
+            <div className="date-field min-w-0">
+              <label htmlFor="approval-date-from" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                Date From
+              </label>
+              <input
+                id="approval-date-from"
+                type="date"
+                value={submittedFrom}
+                onChange={(event) => {
+                  setSubmittedFrom(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="block h-10 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-900 shadow-xs transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="date-field min-w-0">
+              <label htmlFor="approval-date-to" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                Date To
+              </label>
+              <input
+                id="approval-date-to"
+                type="date"
+                value={submittedTo}
+                onChange={(event) => {
+                  setSubmittedTo(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className="block h-10 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-900 shadow-xs transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="h-10 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 xl:w-auto"
+              disabled={!hasActiveFilters}
+            >
+              Clear
+            </button>
           </div>
 
           <FilterBar

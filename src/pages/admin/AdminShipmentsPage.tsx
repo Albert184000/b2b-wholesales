@@ -1,15 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Eye, MapPin, RadioTower, Search, Truck } from 'lucide-react';
+import { Archive, CheckCircle2, Edit, Eye, MapPin, Plus, RadioTower, Save, Search, Trash2, Truck } from 'lucide-react';
 import {
   Button,
   Card,
   Column,
   DataTable,
   FilterBar,
+  Input,
   KPICard,
+  Modal,
   PageHeader,
   SearchBar,
+  Select,
   StatusBadge
 } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
@@ -23,7 +26,20 @@ interface CarrierRow {
   deliveredShipments: number;
   serviceLevel: string;
   status: string;
+  isCustom?: boolean;
 }
+
+interface CarrierDraft {
+  carrier: string;
+  serviceLevel: string;
+  status: string;
+}
+
+const blankCarrierDraft: CarrierDraft = {
+  carrier: '',
+  serviceLevel: 'Regional LTL',
+  status: 'Active'
+};
 
 export const AdminShipmentsPage: React.FC = () => {
   const { shipments, updateShipmentStatus, showToast } = useApp();
@@ -31,6 +47,11 @@ export const AdminShipmentsPage: React.FC = () => {
   const activeTab = searchParams.get('tab') || 'shipments';
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [customCarriers, setCustomCarriers] = useState<CarrierRow[]>([]);
+  const [carrierOverrides, setCarrierOverrides] = useState<Record<string, Partial<CarrierRow>>>({});
+  const [carrierModalOpen, setCarrierModalOpen] = useState(false);
+  const [editingCarrierId, setEditingCarrierId] = useState<string | null>(null);
+  const [carrierDraft, setCarrierDraft] = useState<CarrierDraft>(blankCarrierDraft);
 
   const inTransitCount = shipments.filter((shipment) => ['Dispatched', 'In Transit', 'Out for Delivery'].includes(shipment.status)).length;
   const deliveredCount = shipments.filter((shipment) => shipment.status === 'Delivered').length;
@@ -52,8 +73,16 @@ export const AdminShipmentsPage: React.FC = () => {
       row.deliveredShipments += shipment.status === 'Delivered' ? 1 : 0;
       grouped.set(shipment.carrier, row);
     });
-    return Array.from(grouped.values());
-  }, [shipments]);
+    const rows = Array.from(grouped.values()).map((carrier) => ({
+      ...carrier,
+      ...carrierOverrides[carrier.id]
+    }));
+
+    const derivedIds = new Set(rows.map((carrier) => carrier.id));
+    const standaloneCarriers = customCarriers.filter((carrier) => !derivedIds.has(carrier.id));
+
+    return [...standaloneCarriers, ...rows];
+  }, [carrierOverrides, customCarriers, shipments]);
 
   const filteredShipments = shipments.filter((shipment) => {
     const query = searchTerm.trim().toLowerCase();
@@ -76,6 +105,86 @@ export const AdminShipmentsPage: React.FC = () => {
   const updateStatus = (shipment: Shipment, status: string) => {
     updateShipmentStatus(shipment.id, status);
     showToast(`${shipment.shipmentNumber || shipment.id} moved to ${status}.`, status === 'Delayed' ? 'warning' : 'success');
+  };
+
+  const openCarrierModal = (carrier?: CarrierRow) => {
+    if (carrier) {
+      setEditingCarrierId(carrier.id);
+      setCarrierDraft({
+        carrier: carrier.carrier,
+        serviceLevel: carrier.serviceLevel,
+        status: carrier.status
+      });
+    } else {
+      setEditingCarrierId(null);
+      setCarrierDraft(blankCarrierDraft);
+    }
+    setCarrierModalOpen(true);
+  };
+
+  const saveCarrier = (event: React.FormEvent) => {
+    event.preventDefault();
+    const carrierName = carrierDraft.carrier.trim();
+    if (!carrierName) {
+      showToast('Carrier name is required.', 'error');
+      return;
+    }
+
+    if (editingCarrierId) {
+      const patch = {
+        carrier: carrierName,
+        serviceLevel: carrierDraft.serviceLevel,
+        status: carrierDraft.status
+      };
+      setCustomCarriers((current) =>
+        current.map((carrier) => (carrier.id === editingCarrierId ? { ...carrier, ...patch } : carrier))
+      );
+      setCarrierOverrides((current) => ({ ...current, [editingCarrierId]: patch }));
+      showToast(`${carrierName} carrier profile updated.`, 'success');
+    } else {
+      const id = `carrier-${Date.now()}`;
+      setCustomCarriers((current) => [
+        {
+          id,
+          carrier: carrierName,
+          serviceLevel: carrierDraft.serviceLevel,
+          status: carrierDraft.status,
+          activeShipments: 0,
+          deliveredShipments: 0,
+          isCustom: true
+        },
+        ...current
+      ]);
+      showToast(`${carrierName} added to logistics carrier directory.`, 'success');
+    }
+
+    setCarrierModalOpen(false);
+  };
+
+  const toggleCarrierStatus = (carrier: CarrierRow) => {
+    const nextStatus = carrier.status === 'Active' ? 'Inactive' : 'Active';
+    if (carrier.isCustom) {
+      setCustomCarriers((current) => current.map((item) => (item.id === carrier.id ? { ...item, status: nextStatus } : item)));
+    }
+    setCarrierOverrides((current) => ({
+      ...current,
+      [carrier.id]: { ...current[carrier.id], status: nextStatus }
+    }));
+    showToast(`${carrier.carrier} set to ${nextStatus}.`, nextStatus === 'Active' ? 'success' : 'warning');
+  };
+
+  const deleteCarrier = (carrier: CarrierRow) => {
+    if (carrier.activeShipments > 0) {
+      showToast('Carriers with active shipments cannot be deleted.', 'warning');
+      return;
+    }
+    setCustomCarriers((current) => current.filter((item) => item.id !== carrier.id));
+    setCarrierOverrides((current) => {
+      const next = { ...current };
+      delete next[carrier.id];
+      return next;
+    });
+    showToast(`${carrier.carrier} removed from carrier directory.`, 'warning');
   };
 
   const shipmentColumns: Column<Shipment>[] = [
@@ -159,7 +268,29 @@ export const AdminShipmentsPage: React.FC = () => {
     { key: 'service', header: 'Service Level', accessor: (carrier) => <span className="text-slate-700">{carrier.serviceLevel}</span> },
     { key: 'active', header: 'Active Loads', align: 'right', accessor: (carrier) => <span className="font-mono font-bold text-slate-900">{carrier.activeShipments}</span> },
     { key: 'delivered', header: 'Delivered', align: 'right', accessor: (carrier) => <span className="font-mono font-bold text-slate-900">{carrier.deliveredShipments}</span> },
-    { key: 'status', header: 'Status', accessor: (carrier) => <StatusBadge status={carrier.status} size="sm" /> }
+    { key: 'status', header: 'Status', accessor: (carrier) => <StatusBadge status={carrier.status} size="sm" /> },
+    {
+      key: 'actions',
+      header: 'Actions',
+      accessor: (carrier) => (
+        <div className="flex min-w-[220px] flex-wrap items-center gap-1.5">
+          <Button variant="outline" size="xs" icon={Edit} onClick={() => openCarrierModal(carrier)}>
+            Edit
+          </Button>
+          <Button
+            variant={carrier.status === 'Active' ? 'ghost' : 'success'}
+            size="xs"
+            icon={carrier.status === 'Active' ? Archive : CheckCircle2}
+            onClick={() => toggleCarrierStatus(carrier)}
+          >
+            {carrier.status === 'Active' ? 'Deactivate' : 'Activate'}
+          </Button>
+          <Button variant="ghost" size="xs" icon={Trash2} onClick={() => deleteCarrier(carrier)}>
+            Delete
+          </Button>
+        </div>
+      )
+    }
   ];
 
   return (
@@ -201,7 +332,17 @@ export const AdminShipmentsPage: React.FC = () => {
         })}
       </div>
 
-      <Card className="border-slate-200" noPadding>
+      <Card
+        className="border-slate-200"
+        noPadding
+        action={
+          activeTab === 'carriers' ? (
+            <Button variant="primary" size="sm" icon={Plus} onClick={() => openCarrierModal()}>
+              Add Carrier
+            </Button>
+          ) : null
+        }
+      >
         <div className="space-y-4 p-4">
           <div className="flex flex-col gap-3 lg:flex-row">
             <div className="flex-1">
@@ -245,6 +386,47 @@ export const AdminShipmentsPage: React.FC = () => {
           )}
         </div>
       </Card>
+
+      <Modal
+        isOpen={carrierModalOpen}
+        onClose={() => setCarrierModalOpen(false)}
+        title={editingCarrierId ? 'Edit Carrier' : 'Add Carrier'}
+        subtitle="Maintain carrier service levels and operational availability for dispatch planning."
+      >
+        <form onSubmit={saveCarrier} className="space-y-4">
+          <Input
+            label="Carrier Name"
+            required
+            value={carrierDraft.carrier}
+            onChange={(event) => setCarrierDraft((draft) => ({ ...draft, carrier: event.target.value }))}
+          />
+          <Input
+            label="Service Level"
+            required
+            value={carrierDraft.serviceLevel}
+            onChange={(event) => setCarrierDraft((draft) => ({ ...draft, serviceLevel: event.target.value }))}
+            placeholder="Regional LTL, express pallet, cross-border freight..."
+          />
+          <Select
+            label="Status"
+            value={carrierDraft.status}
+            onChange={(event) => setCarrierDraft((draft) => ({ ...draft, status: event.target.value }))}
+            options={[
+              { label: 'Active', value: 'Active' },
+              { label: 'Inactive', value: 'Inactive' },
+              { label: 'Watchlist', value: 'Watchlist' }
+            ]}
+          />
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => setCarrierModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" icon={Save}>
+              {editingCarrierId ? 'Save Carrier' : 'Create Carrier'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

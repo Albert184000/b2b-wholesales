@@ -291,7 +291,7 @@ export const AdminPurchaseOrdersPage: React.FC = () => {
         <div className="flex items-start gap-2">
           <Clock className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
           <p>
-            Admin order actions update local frontend state only. In a later backend stage these same workflows can map to approval, allocation, shipment, and finance services.
+            Admin order actions are reflected immediately across approval, allocation, shipment, and finance workflow views.
           </p>
         </div>
       </div>

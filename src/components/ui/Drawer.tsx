@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 
 export interface DrawerProps {
@@ -22,17 +22,56 @@ export const Drawer: React.FC<DrawerProps> = ({
   size = 'md',
   position = 'right'
 }) => {
+  const titleId = useId();
+  const drawerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose();
+      if (!isOpen) return;
+
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && drawerRef.current) {
+        const focusable = Array.from(
+          drawerRef.current.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        ) as HTMLElement[];
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleKeyDown);
+      requestAnimationFrame(() => {
+        const firstFocusable = drawerRef.current?.querySelector<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        firstFocusable?.focus();
+      });
     }
+
     return () => {
       document.body.style.overflow = '';
       window.removeEventListener('keydown', handleKeyDown);
+      previouslyFocused?.focus?.();
     };
   }, [isOpen, onClose]);
 
@@ -58,16 +97,22 @@ export const Drawer: React.FC<DrawerProps> = ({
         } flex max-w-full pl-10`}
       >
         <div
+          ref={drawerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
           className={`w-screen ${sizeClasses[size]} bg-white shadow-2xl flex flex-col border-l border-slate-200 animate-in slide-in-from-${position} duration-200`}
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
-              <h3 className="text-base font-bold text-slate-900">{title}</h3>
+              <h3 id={titleId} className="text-base font-bold text-slate-900">{title}</h3>
               {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
             </div>
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close drawer"
               className="text-slate-400 hover:text-slate-600 rounded-lg p-1.5 hover:bg-slate-100 transition-colors"
             >
               <X className="w-5 h-5" />

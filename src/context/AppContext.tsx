@@ -41,6 +41,7 @@ import {
 } from '../data/mockData';
 import { getQuoteExpiryState } from '../utils/rfqQuote';
 import { buildCreditCheck, buildStockAllocation, getQuoteConversionTotal } from '../utils/poContract';
+import { RoleDefinition, getRoleDisplayName, roleDefinitions } from '../utils/rbac';
 
 interface Toast {
   id: string;
@@ -51,6 +52,8 @@ interface Toast {
 interface AppContextType {
   currentUser: UserAccount;
   setCurrentRole: (role: UserRole) => void;
+  roles: RoleDefinition[];
+  setRoles: React.Dispatch<React.SetStateAction<RoleDefinition[]>>;
   currentBuyer: BuyerCompany;
   products: Product[];
   buyers: BuyerCompany[];
@@ -157,6 +160,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ...mockAdminNotifications,
     ...mockNotifications
   ]);
+  const [roles, setRoles] = useState<RoleDefinition[]>(() =>
+    roleDefinitions.map((role) => ({
+      ...role,
+      permissions: [...role.permissions],
+      dashboardFocus: [...role.dashboardFocus]
+    }))
+  );
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
@@ -175,7 +185,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const found = mockUsers.find((u) => u.role === role);
     if (found) {
       setCurrentUser(found);
-      showToast(`Switched active perspective to ${found.name} (${found.role})`, 'info');
+      showToast(`Switched active perspective to ${found.name} (${getRoleDisplayName(found.role, roles)})`, 'info');
     } else {
       // Guest or fallback
       setCurrentUser({
@@ -1309,9 +1319,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     paymentId: `PAY-${Date.now()}`,
                     invoiceId: invoice.id,
                     date: new Date().toISOString().split('T')[0],
-                    method: 'Mock Bank Transfer',
+                    method: 'Bank Transfer',
                     amount: total,
-                    reference: `MOCK-${invoice.invoiceNumber || invoice.id}`,
+                    reference: `AUTO-${invoice.invoiceNumber || invoice.id}`,
                     status: 'Completed'
                   }
                 ]
@@ -1380,6 +1390,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         currentUser,
         setCurrentRole,
+        roles,
+        setRoles,
         currentBuyer,
         products,
         buyers,

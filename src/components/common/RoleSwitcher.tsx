@@ -1,92 +1,108 @@
 import React from 'react';
-import { UserCheck, Shield, ShoppingBag, Briefcase, Eye, ChevronDown } from 'lucide-react';
+import { Briefcase, ChevronDown, Eye, Shield, ShoppingBag, UserCheck } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
+import {
+  canAccessAdminPortal,
+  canAccessBuyerPortal,
+  getRoleDisplayName,
+  getRolePermissionCount
+} from '../../utils/rbac';
 import { Dropdown, DropdownItem } from '../ui';
+
+const demoRoles: {
+  id: UserRole;
+  label: string;
+  person: string;
+  icon: DropdownItem['icon'];
+}[] = [
+  { id: 'ADMIN', label: 'Super Admin', person: 'Un Somnang', icon: Shield },
+  { id: 'SALES_MANAGER', label: 'Sales Manager', person: 'Marcus Vance', icon: Briefcase },
+  { id: 'ACCOUNT_EXECUTIVE', label: 'Account Executive', person: 'David Chen', icon: UserCheck },
+  { id: 'VERIFIED_BUYER', label: 'Verified Buyer', person: 'Sovannarith Keo', icon: ShoppingBag },
+  { id: 'GUEST', label: 'Guest Buyer', person: 'Public Visitor', icon: Eye }
+];
 
 export const RoleSwitcher: React.FC = () => {
   const { currentUser, setCurrentRole } = useApp();
+  const location = useLocation();
+  const currentRoleName = getRoleDisplayName(currentUser.role);
+  const permissionCount = getRolePermissionCount(currentUser.role);
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isBuyerRoute = location.pathname.startsWith('/buyer');
+  const canExitPerspective = isAdminRoute && currentUser.role !== 'ADMIN';
 
-  const roleItems: DropdownItem[] = [
-    {
-      id: 'buyer',
-      label: 'Verified Buyer (ABC Technology Ltd.)',
-      icon: ShoppingBag,
-      onClick: () => setCurrentRole('VERIFIED_BUYER'),
-      variant: currentUser.role === 'VERIFIED_BUYER' ? 'primary' : 'default'
-    },
-    {
-      id: 'admin',
-      label: 'Chief Admin (Procurement Ops)',
-      icon: Shield,
-      onClick: () => setCurrentRole('ADMIN'),
-      variant: currentUser.role === 'ADMIN' ? 'primary' : 'default'
-    },
-    {
-      id: 'sales_mgr',
-      label: 'Sales Manager (Marcus Vance)',
-      icon: Briefcase,
-      onClick: () => setCurrentRole('SALES_MANAGER'),
-      variant: currentUser.role === 'SALES_MANAGER' ? 'primary' : 'default'
-    },
-    {
-      id: 'rep',
-      label: 'Account Executive (David Chen)',
-      icon: UserCheck,
-      onClick: () => setCurrentRole('ACCOUNT_EXECUTIVE'),
-      variant: currentUser.role === 'ACCOUNT_EXECUTIVE' ? 'primary' : 'default'
-    },
-    {
-      id: 'divider-1',
-      label: '',
-      onClick: () => {},
-      divider: true
-    },
-    {
-      id: 'guest',
-      label: 'Public Storefront Guest',
-      icon: Eye,
-      onClick: () => setCurrentRole('GUEST'),
-      variant: currentUser.role === 'GUEST' ? 'primary' : 'default'
-    }
-  ];
+  const roleItems: DropdownItem[] = demoRoles.map((role) => ({
+    id: role.id,
+    label: `${role.label} (${role.person})`,
+    icon: role.icon,
+    onClick: () => setCurrentRole(role.id),
+    variant: currentUser.role === role.id ? 'primary' : 'default'
+  }));
 
-  const getRoleBadge = (role: UserRole) => {
-    switch (role) {
-      case 'ADMIN':
-        return { label: 'Admin Portal View', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30' };
-      case 'SALES_MANAGER':
-        return { label: 'Sales Manager View', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30' };
-      case 'ACCOUNT_EXECUTIVE':
-        return { label: 'Sales Rep View', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' };
-      case 'VERIFIED_BUYER':
-        return { label: 'Buyer Portal (ABC Tech)', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
-      default:
-        return { label: 'Public Website View', color: 'bg-blue-500/20 text-blue-300 border-blue-500/30' };
-    }
-  };
+  const activePortal = isAdminRoute
+    ? {
+        label: 'Admin Portal',
+        color: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+      }
+    : isBuyerRoute
+    ? {
+        label: 'Buyer Portal',
+        color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+      }
+    : {
+        label: 'Public Website',
+        color: 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+      };
 
-  const badge = getRoleBadge(currentUser.role);
+  const perspectiveColor = canAccessAdminPortal(currentUser.role)
+    ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+    : canAccessBuyerPortal(currentUser.role)
+    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+    : 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+
+  const perspectiveLabel =
+    permissionCount > 0 ? `${currentRoleName} - ${permissionCount} permissions` : `${currentRoleName} - portal-only`;
 
   return (
-    <div className="bg-slate-950 text-slate-300 px-4 py-1.5 text-xs border-b border-slate-800 flex items-center justify-between z-40 relative">
-      <div className="flex items-center gap-2">
-        <span className="font-semibold text-slate-400">Interactive Perspective:</span>
-        <span className={`px-2 py-0.5 rounded-md border text-[11px] font-bold ${badge.color}`}>
-          {badge.label}
+    <div className="relative z-40 flex flex-col gap-2 border-b border-slate-800 bg-slate-950 px-4 py-1.5 text-xs text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-400">Active Portal:</span>
+        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-bold ${activePortal.color}`}>
+          {activePortal.label}
         </span>
-        <span className="hidden md:inline text-slate-500">|</span>
-        <span className="hidden md:inline text-slate-400">
-          Acting as <strong className="text-white">{currentUser.name}</strong> ({currentUser.email})
+        <span className="text-slate-500">|</span>
+        <span className="font-semibold text-slate-400">Signed in as:</span>
+        <span className="font-bold text-white">
+          {currentUser.name} - {currentRoleName}
+        </span>
+        <span className="text-slate-500">|</span>
+        <span className="font-semibold text-slate-400">Perspective:</span>
+        <span className={`rounded-md border px-2 py-0.5 text-[11px] font-bold ${perspectiveColor}`}>
+          {perspectiveLabel}
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {canExitPerspective && (
+          <button
+            type="button"
+            onClick={() => setCurrentRole('ADMIN')}
+            className="rounded-md border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-xs font-bold text-rose-200 transition-colors hover:bg-rose-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+          >
+            Exit Perspective
+          </button>
+        )}
         <Dropdown
           trigger={
-            <button className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-md text-xs font-semibold border border-slate-700 transition-colors">
-              <span>Switch Demo Perspective</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <button
+              type="button"
+              aria-label="Switch portal perspective"
+              className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            >
+              <span>Switch Role</span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
             </button>
           }
           items={roleItems}
@@ -96,3 +112,4 @@ export const RoleSwitcher: React.FC = () => {
     </div>
   );
 };
+

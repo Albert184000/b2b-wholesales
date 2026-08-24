@@ -8,7 +8,9 @@ import {
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
-  ShieldCheck
+  ShieldCheck,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Button, Input, Select, Textarea, FileUpload, Checkbox, Card, Alert } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
@@ -28,8 +30,8 @@ const initialRegistrationData = {
   phone: '+855 (0) 63 963 888',
   requestedCreditLimit: '30000',
   estimatedMonthlySpend: '18000',
-  password: 'demo-password',
-  confirmPassword: 'demo-password',
+  password: 'business-password',
+  confirmPassword: 'business-password',
   agreedToTerms: true
 };
 
@@ -41,6 +43,7 @@ export const RegisterPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState(initialRegistrationData);
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, string[]>>({});
+  const [showPasswords, setShowPasswords] = useState(false);
 
   const steps = [
     { num: 1, title: 'Company Details' },
@@ -113,7 +116,7 @@ export const RegisterPage: React.FC = () => {
     }
 
     showToast('Business registration application submitted for corporate verification!', 'success');
-    navigate('/pending-approval');
+    navigate('/registration-submitted');
   };
 
   const handleBack = () => {
@@ -338,8 +341,9 @@ export const RegisterPage: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
+                id="registration-password"
                 label="Account Password"
-                type="password"
+                type={showPasswords ? 'text' : 'password'}
                 required
                 value={formData.password}
                 onChange={(event) => updateField('password', event.target.value)}
@@ -347,14 +351,26 @@ export const RegisterPage: React.FC = () => {
               />
 
               <Input
+                id="registration-confirm-password"
                 label="Confirm Password"
-                type="password"
+                type={showPasswords ? 'text' : 'password'}
                 required
                 value={formData.confirmPassword}
                 onChange={(event) => updateField('confirmPassword', event.target.value)}
                 autoComplete="new-password"
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPasswords((value) => !value)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-1 text-xs font-bold text-blue-700 hover:text-blue-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              aria-controls="registration-password registration-confirm-password"
+              aria-pressed={showPasswords}
+            >
+              {showPasswords ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {showPasswords ? 'Hide passwords' : 'Show passwords'}
+            </button>
 
             <div className="pt-2">
               <Checkbox

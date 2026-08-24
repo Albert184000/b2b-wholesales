@@ -75,30 +75,32 @@ export const KPICard: React.FC<KPICardProps> = ({
         onClick ? 'cursor-pointer hover:shadow-sm' : ''
       } ${className}`}
     >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      <div className="mb-3 flex min-h-10 items-start justify-between gap-3">
+        <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wider leading-snug text-slate-500">
           {title}
         </span>
-        {Icon && (
-          <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-            <Icon className="w-4 h-4" />
-          </div>
-        )}
-        {badge && (
-          <span
-            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-              badgeVariant === 'success'
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : badgeVariant === 'amber'
-                ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                : badgeVariant === 'danger'
-                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                : 'bg-blue-50 text-blue-700 border border-blue-200'
-            }`}
-          >
-            {badge}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {badge && (
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                badgeVariant === 'success'
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : badgeVariant === 'amber'
+                  ? 'border border-amber-200 bg-amber-50 text-amber-700'
+                  : badgeVariant === 'danger'
+                  ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                  : 'border border-blue-200 bg-blue-50 text-blue-700'
+              }`}
+            >
+              {badge}
+            </span>
+          )}
+          {Icon && (
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600">
+              <Icon className="h-4 w-4" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex items-baseline justify-between gap-2">
@@ -106,10 +108,10 @@ export const KPICard: React.FC<KPICardProps> = ({
       </div>
 
       {(change || subtext) && (
-        <div className="mt-2.5 flex items-center gap-2 text-xs">
+        <div className="mt-2.5 flex min-h-[34px] items-start gap-2 text-xs leading-snug">
           {change && (
             <span
-              className={`inline-flex items-center gap-0.5 font-semibold ${
+              className={`inline-flex shrink-0 items-center gap-0.5 font-semibold ${
                 changeType === 'positive'
                   ? 'text-emerald-600'
                   : changeType === 'negative'
@@ -122,7 +124,11 @@ export const KPICard: React.FC<KPICardProps> = ({
               {change}
             </span>
           )}
-          {subtext && <span className="text-slate-500 truncate">{subtext}</span>}
+          {subtext && (
+            <span className="text-slate-500 [display:-webkit-box] overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+              {subtext}
+            </span>
+          )}
         </div>
       )}
     </div>

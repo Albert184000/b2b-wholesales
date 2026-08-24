@@ -17,7 +17,6 @@ import {
   Column,
   DataTable,
   EmptyState,
-  FilterBar,
   Input,
   KPICard,
   Modal,
@@ -29,14 +28,17 @@ import {
 } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
 import { BuyerCompany, BuyerGroup, PaymentTerms } from '../../types';
+import { getPendingBuyerApprovalCount } from '../../utils/adminMetrics';
 import { getCreditAvailable } from '../../utils/financeLogistics';
 import { formatCurrency } from '../../utils/pricing';
 
 const pageSize = 8;
+const controlClassName = 'h-10 min-w-0';
 
 export const AdminBuyersPage: React.FC = () => {
   const {
     buyers,
+    buyerApplications,
     updateBuyerAccountStatus,
     updateBuyerCredit,
     updateBuyerGroupAssignment,
@@ -48,22 +50,28 @@ export const AdminBuyersPage: React.FC = () => {
   const [repFilter, setRepFilter] = useState('ALL');
   const [countryFilter, setCountryFilter] = useState('ALL');
   const [joinedFrom, setJoinedFrom] = useState('');
+  const [joinedTo, setJoinedTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [editingBuyer, setEditingBuyer] = useState<BuyerCompany | null>(null);
   const [editGroup, setEditGroup] = useState<BuyerGroup>('Corporate');
   const [editTerms, setEditTerms] = useState<PaymentTerms>('Net 30');
   const [editCreditLimit, setEditCreditLimit] = useState(0);
 
-  const summary = useMemo(
-    () => ({
-      total: buyers.length,
-      approved: buyers.filter((buyer) => buyer.status === 'Approved' || buyer.status === 'Active').length,
-      pending: buyers.filter((buyer) => buyer.status === 'Pending' || buyer.status === 'Under Review').length,
-      suspended: buyers.filter((buyer) => buyer.status === 'Suspended').length,
+  const pendingApprovalCount = useMemo(() => getPendingBuyerApprovalCount(buyerApplications), [buyerApplications]);
+  const summary = useMemo(() => {
+    const approved = buyers.filter((buyer) => buyer.status === 'Approved' || buyer.status === 'Active').length;
+    const suspended = buyers.filter((buyer) => buyer.status === 'Suspended').length;
+    const pendingAccounts = buyers.filter((buyer) => buyer.status === 'Pending' || buyer.status === 'Under Review').length;
+    const pendingNotRepresentedInTable = Math.max(0, pendingApprovalCount - pendingAccounts);
+
+    return {
+      total: buyers.length + pendingNotRepresentedInTable,
+      approved,
+      pending: pendingApprovalCount,
+      suspended,
       priority: buyers.filter((buyer) => ['VIP', 'Corporate', 'Distributor'].includes(buyer.buyerGroup)).length
-    }),
-    [buyers]
-  );
+    };
+  }, [buyers, pendingApprovalCount]);
 
   const groupOptions = Array.from(new Set(buyers.map((buyer) => buyer.buyerGroup)));
   const repOptions = Array.from(new Set(buyers.map((buyer) => buyer.assignedRep.name)));
@@ -89,11 +97,12 @@ export const AdminBuyersPage: React.FC = () => {
       const matchesGroup = groupFilter === 'ALL' || buyer.buyerGroup === groupFilter;
       const matchesRep = repFilter === 'ALL' || buyer.assignedRep.name === repFilter;
       const matchesCountry = countryFilter === 'ALL' || (buyer.country || 'Cambodia') === countryFilter;
-      const matchesDate = !joinedFrom || buyer.joinedDate >= joinedFrom;
+      const matchesDateFrom = !joinedFrom || buyer.joinedDate >= joinedFrom;
+      const matchesDateTo = !joinedTo || buyer.joinedDate <= joinedTo;
 
-      return matchesSearch && matchesStatus && matchesGroup && matchesRep && matchesCountry && matchesDate;
+      return matchesSearch && matchesStatus && matchesGroup && matchesRep && matchesCountry && matchesDateFrom && matchesDateTo;
     });
-  }, [buyers, countryFilter, groupFilter, joinedFrom, repFilter, searchTerm, statusFilter]);
+  }, [buyers, countryFilter, groupFilter, joinedFrom, joinedTo, repFilter, searchTerm, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredBuyers.length / pageSize));
   const currentPageSafe = Math.min(currentPage, totalPages);
@@ -104,7 +113,8 @@ export const AdminBuyersPage: React.FC = () => {
     groupFilter !== 'ALL' ||
     repFilter !== 'ALL' ||
     countryFilter !== 'ALL' ||
-    joinedFrom !== '';
+    joinedFrom !== '' ||
+    joinedTo !== '';
 
   const resetFilters = () => {
     setSearchTerm('');
@@ -113,6 +123,7 @@ export const AdminBuyersPage: React.FC = () => {
     setRepFilter('ALL');
     setCountryFilter('ALL');
     setJoinedFrom('');
+    setJoinedTo('');
     setCurrentPage(1);
   };
 
@@ -136,7 +147,7 @@ export const AdminBuyersPage: React.FC = () => {
       key: 'company',
       header: 'Company',
       accessor: (buyer) => (
-        <div className="min-w-[220px]">
+        <div className="min-w-[240px]">
           <Link to={`/admin/buyers/${buyer.id}`} className="font-bold text-blue-700 hover:text-blue-900">
             {buyer.companyName}
           </Link>
@@ -147,6 +158,7 @@ export const AdminBuyersPage: React.FC = () => {
     {
       key: 'contact',
       header: 'Primary Contact',
+      className: 'hidden md:table-cell',
       accessor: (buyer) => (
         <div className="min-w-[180px] text-sm">
           <div className="font-semibold text-slate-900">{buyer.contactPerson}</div>
@@ -157,17 +169,20 @@ export const AdminBuyersPage: React.FC = () => {
     {
       key: 'group',
       header: 'Buyer Group',
+      className: 'hidden lg:table-cell',
       accessor: (buyer) => <StatusBadge status={buyer.buyerGroup} size="sm" />
     },
     {
       key: 'rep',
       header: 'Account Executive',
+      className: 'hidden xl:table-cell',
       accessor: (buyer) => <span className="text-sm font-semibold text-slate-700">{buyer.assignedRep.name}</span>
     },
     {
       key: 'credit',
       header: 'Credit Limit',
       align: 'right',
+      className: 'hidden 2xl:table-cell',
       accessor: (buyer) => (
         <span className="font-mono font-bold text-slate-900">{formatCurrency(buyer.creditLimit)}</span>
       )
@@ -176,6 +191,7 @@ export const AdminBuyersPage: React.FC = () => {
       key: 'available',
       header: 'Available Credit',
       align: 'right',
+      className: 'hidden xl:table-cell',
       accessor: (buyer) => (
         <span className="font-mono font-bold text-emerald-700">
           {formatCurrency(getCreditAvailable(buyer.creditLimit, buyer.usedCredit))}
@@ -186,6 +202,7 @@ export const AdminBuyersPage: React.FC = () => {
       key: 'purchases',
       header: 'Total Purchases',
       align: 'right',
+      className: 'hidden 2xl:table-cell',
       accessor: (buyer) => (
         <span className="font-mono font-bold text-blue-700">{formatCurrency(buyer.totalPurchases || 0)}</span>
       )
@@ -198,14 +215,14 @@ export const AdminBuyersPage: React.FC = () => {
     {
       key: 'joined',
       header: 'Joined Date',
-      accessor: (buyer) => <span className="font-semibold text-slate-700">{buyer.joinedDate}</span>
+      accessor: (buyer) => <span className="block min-w-[112px] whitespace-nowrap font-semibold text-slate-700">{buyer.joinedDate}</span>
     },
     {
       key: 'actions',
       header: 'Actions',
       align: 'right',
       accessor: (buyer) => (
-        <div className="flex justify-end gap-2">
+        <div className="flex min-w-[220px] justify-end gap-2">
           <Link to={`/admin/buyers/${buyer.id}`}>
             <Button variant="outline" size="xs" icon={Eye}>
               View
@@ -240,97 +257,142 @@ export const AdminBuyersPage: React.FC = () => {
         actions={
           <Link to="/admin/approvals">
             <Button variant="primary" size="sm" icon={UserCheck}>
-              Approval Queue
+              Approval Queue ({pendingApprovalCount})
             </Button>
           </Link>
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <KPICard title="Total Buyers" value={summary.total} icon={Users} subtext="All buyer records" />
         <KPICard title="Approved" value={summary.approved} icon={ShieldCheck} subtext="Verified accounts" badge="Active" badgeVariant="success" />
-        <KPICard title="Pending" value={summary.pending} icon={UserCheck} subtext="Needs review" badge="Queue" badgeVariant="amber" />
+        <KPICard title="Pending Buyers" value={summary.pending} icon={UserCheck} subtext="Needs review" badge="Queue" badgeVariant="amber" />
         <KPICard title="Suspended" value={summary.suspended} icon={PauseCircle} subtext="Credit or compliance hold" badge="Hold" badgeVariant="danger" />
         <KPICard title="VIP / Corporate" value={summary.priority} icon={WalletCards} subtext="Priority pricing groups" />
       </div>
 
       <Card className="border-slate-200" noPadding>
         <div className="space-y-4 p-4">
-          <div className="flex flex-col gap-3 xl:flex-row">
-            <div className="min-w-0 flex-1">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-[minmax(280px,2fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(160px,1fr)_minmax(180px,1.1fr)_minmax(220px,1.2fr)_minmax(160px,1fr)_auto] 2xl:items-end">
+            <div className="min-w-0 md:col-span-2 lg:col-span-3 2xl:col-span-1">
+              <label htmlFor="buyer-search" className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                Search
+              </label>
               <SearchBar
+                id="buyer-search"
                 value={searchTerm}
                 onChange={(value) => {
                   setSearchTerm(value);
                   setCurrentPage(1);
                 }}
-                placeholder="Search company, contact, tax ID, registration, or account executive..."
+                placeholder="Search buyers..."
+                className="w-full"
+                inputClassName={controlClassName}
               />
             </div>
-            <Input
-              label="Joined From"
-              type="date"
-              value={joinedFrom}
-              onChange={(event) => {
-                setJoinedFrom(event.target.value);
-                setCurrentPage(1);
-              }}
-              className="xl:min-w-[170px]"
-            />
-          </div>
-
-          <FilterBar
-            filters={[
-              {
-                id: 'status',
-                label: 'Status',
-                value: statusFilter,
-                onChange: (value) => {
-                  setStatusFilter(value);
+            <div className="min-w-0">
+              <Input
+                label="From"
+                type="date"
+                value={joinedFrom}
+                onChange={(event) => {
+                  setJoinedFrom(event.target.value);
                   setCurrentPage(1);
-                },
-                options: [
+                }}
+                className={controlClassName}
+              />
+            </div>
+            <div className="min-w-0">
+              <Input
+                label="To"
+                type="date"
+                value={joinedTo}
+                onChange={(event) => {
+                  setJoinedTo(event.target.value);
+                  setCurrentPage(1);
+                }}
+                className={controlClassName}
+              />
+            </div>
+            <div className="min-w-0">
+              <Select
+                label="Status"
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                  setCurrentPage(1);
+                }}
+                options={[
+                  { label: 'All Statuses', value: 'ALL' },
                   { label: 'Approved', value: 'Approved' },
                   { label: 'Pending', value: 'Pending' },
                   { label: 'Under Review', value: 'Under Review' },
                   { label: 'Suspended', value: 'Suspended' },
                   { label: 'Rejected', value: 'Rejected' }
-                ]
-              },
-              {
-                id: 'group',
-                label: 'Buyer Group',
-                value: groupFilter,
-                onChange: (value) => {
-                  setGroupFilter(value);
+                ]}
+                className={controlClassName}
+              />
+            </div>
+            <div className="min-w-0">
+              <Select
+                label="Buyer Group"
+                value={groupFilter}
+                onChange={(event) => {
+                  setGroupFilter(event.target.value);
                   setCurrentPage(1);
-                },
-                options: groupOptions.map((group) => ({ label: group, value: group }))
-              },
-              {
-                id: 'rep',
-                label: 'Account Executive',
-                value: repFilter,
-                onChange: (value) => {
-                  setRepFilter(value);
+                }}
+                options={[
+                  { label: 'All Groups', value: 'ALL' },
+                  ...groupOptions.map((group) => ({ label: group, value: group }))
+                ]}
+                className={controlClassName}
+              />
+            </div>
+            <div className="min-w-0">
+              <Select
+                label="Account Executive"
+                value={repFilter}
+                onChange={(event) => {
+                  setRepFilter(event.target.value);
                   setCurrentPage(1);
-                },
-                options: repOptions.map((rep) => ({ label: rep, value: rep }))
-              },
-              {
-                id: 'country',
-                label: 'Country',
-                value: countryFilter,
-                onChange: (value) => {
-                  setCountryFilter(value);
+                }}
+                options={[
+                  { label: 'All Executives', value: 'ALL' },
+                  ...repOptions.map((rep) => ({ label: rep, value: rep }))
+                ]}
+                className={controlClassName}
+              />
+            </div>
+            <div className="min-w-0">
+              <Select
+                label="Country"
+                value={countryFilter}
+                onChange={(event) => {
+                  setCountryFilter(event.target.value);
                   setCurrentPage(1);
-                },
-                options: countryOptions.map((country) => ({ label: country, value: country }))
-              }
-            ]}
-            hasActiveFilters={hasActiveFilters}
-            onReset={resetFilters}
-          />
+                }}
+                options={[
+                  { label: 'All Countries', value: 'ALL' },
+                  ...countryOptions.map((country) => ({ label: country, value: country }))
+                ]}
+                className={controlClassName}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant={hasActiveFilters ? 'outline' : 'secondary'}
+                size="sm"
+                onClick={resetFilters}
+                disabled={!hasActiveFilters}
+                className={`h-10 w-full px-4 2xl:w-auto ${
+                  hasActiveFilters ? 'border-blue-300 text-blue-700 hover:bg-blue-50' : ''
+                }`}
+              >
+                Reset Filters
+              </Button>
+            </div>
+          </div>
         </div>
 
         {filteredBuyers.length === 0 ? (
@@ -345,7 +407,12 @@ export const AdminBuyersPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-3 p-4 pt-0">
-            <DataTable columns={columns} data={paginatedBuyers} compact />
+            <DataTable
+              columns={columns}
+              data={paginatedBuyers}
+              compact
+              className="[&>table]:min-w-[1040px] [scrollbar-width:thin] [scrollbar-color:rgb(203_213_225)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300"
+            />
             <Pagination
               currentPage={currentPageSafe}
               totalPages={totalPages}

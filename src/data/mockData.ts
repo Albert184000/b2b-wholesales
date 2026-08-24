@@ -288,6 +288,47 @@ export const mockProducts: Product[] = [
       'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&w=800&q=80'
     ],
     featured: true
+  },
+  {
+    id: 'prod-007',
+    sku: 'SEC-NVR32POE',
+    name: 'Hikvision 32-Channel 4K PoE NVR Surveillance Bundle',
+    category: 'Security & Surveillance',
+    brand: 'Hikvision Enterprise',
+    description: 'Commercial surveillance package with 32-channel 4K network video recorder, integrated PoE switching, RAID-ready storage bays, and remote enterprise monitoring support.',
+    specifications: {
+      'Channels': '32 IP camera channels',
+      'Recording Resolution': 'Up to 12 MP / 4K per channel',
+      'PoE Budget': '320W integrated PoE switching',
+      'Storage Bays': '4x SATA bays, up to 16TB each',
+      'Video Output': 'HDMI 4K + VGA',
+      'Security': 'Role-based remote access and encrypted stream support'
+    },
+    moq: 6,
+    unit: 'Sets',
+    currency: 'USD',
+    costPrice: 720,
+    basePrice: 1180,
+    tierPricing: [
+      { minQty: 6, maxQty: 14, unitPrice: 1040, label: 'Project Wholesale' },
+      { minQty: 15, maxQty: 39, unitPrice: 965, label: 'Campus Deployment' },
+      { minQty: 40, maxQty: null, unitPrice: 895, label: 'Integrator Contract' }
+    ],
+    buyerGroupPricing: [
+      { groupId: 'bg-corp', groupName: 'Corporate', discountPercentage: 4 },
+      { groupId: 'bg-vip', groupName: 'VIP', discountPercentage: 7 },
+      { groupId: 'bg-dist', groupName: 'Distributor', discountPercentage: 10 }
+    ],
+    inStock: 96,
+    reservedStock: 18,
+    availableStock: 78,
+    reorderPoint: 18,
+    warehouseLocation: 'Phnom Penh Main Hub (Security Cage S-11)',
+    status: 'Active',
+    images: [
+      'https://images.unsplash.com/photo-1558002038-1055907df827?auto=format&fit=crop&w=800&q=80'
+    ],
+    featured: true
   }
 ];
 

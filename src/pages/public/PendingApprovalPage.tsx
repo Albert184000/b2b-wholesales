@@ -33,9 +33,9 @@ export const PendingApprovalPage: React.FC = () => {
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              Target SLA
+              Review Window
             </div>
-            <div className="mt-1 text-sm font-extrabold text-slate-900">24 business hours</div>
+            <div className="mt-1 text-sm font-extrabold text-slate-900">Varies by document readiness</div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -67,7 +67,7 @@ export const PendingApprovalPage: React.FC = () => {
               {
                 title: 'Credit Limit & Tier Assignment',
                 subtitle: 'Assigning payment terms, buyer group, and starting wholesale tier',
-                date: 'Estimated within 24 hours'
+                date: 'Queued after document checks'
               },
               {
                 title: 'Account Executive Welcome Call',

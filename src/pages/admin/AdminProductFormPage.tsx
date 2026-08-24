@@ -167,7 +167,7 @@ export const AdminProductFormPage: React.FC = () => {
       <div className="space-y-6">
         <PageHeader
           title="Product Not Found"
-          subtitle="The requested admin product record is not available in the current mock data."
+          subtitle="The requested admin product record is not available in the current catalog workspace."
           breadcrumbs={[
             { label: 'Products', href: '/admin/products' },
             { label: 'Not Found' }
@@ -259,7 +259,7 @@ export const AdminProductFormPage: React.FC = () => {
                   label="Primary Image URL"
                   value={imageUrl}
                   onChange={(event) => setImageUrl(event.target.value)}
-                  helperText="Mock frontend only. Paste a stable product image URL for catalog preview."
+                  helperText="Paste a stable product image URL for catalog preview."
                 />
               </div>
             </div>

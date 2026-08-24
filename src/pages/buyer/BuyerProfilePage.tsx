@@ -109,10 +109,10 @@ export const BuyerProfilePage: React.FC = () => {
       setAddresses((prev) =>
         prev.map((address) => (address.id === editingAddressId ? addressDraft : address))
       );
-      showToast('Address updated in frontend profile state.', 'success');
+      showToast('Address updated in buyer profile.', 'success');
     } else {
       setAddresses((prev) => [{ ...addressDraft, id: addressDraft.id || `addr-${Date.now()}` }, ...prev]);
-      showToast('Address added to frontend profile state.', 'success');
+      showToast('Address added to buyer profile.', 'success');
     }
     setAddressModalOpen(false);
   };
@@ -130,7 +130,7 @@ export const BuyerProfilePage: React.FC = () => {
 
   const deleteAddress = (addressId: string) => {
     setAddresses((prev) => prev.filter((address) => address.id !== addressId));
-    showToast('Address removed from frontend profile state.', 'warning');
+    showToast('Address removed from buyer profile.', 'warning');
   };
 
   const documentColumns: Column<BusinessDocument>[] = [
@@ -232,7 +232,7 @@ export const BuyerProfilePage: React.FC = () => {
 
   const saveCompanyInfo = () => {
     setIsEditingCompany(false);
-    showToast('Company information saved in frontend profile state.', 'success');
+    showToast('Company information saved in buyer profile.', 'success');
   };
 
   return (

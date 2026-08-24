@@ -8,7 +8,9 @@ import {
   ArrowRight,
   UserCheck,
   Briefcase,
-  ShoppingBag
+  ShoppingBag,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Button, Input, Checkbox } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
@@ -17,11 +19,12 @@ import { UserRole } from '../../types';
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setCurrentRole, showToast } = useApp();
+  const { setCurrentRole } = useApp();
 
   const [email, setEmail] = useState('keo.sovannarith@abctech.com.kh');
-  const [password, setPassword] = useState('demo-password');
+  const [password, setPassword] = useState('business-password');
   const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
   const nextRoute = useMemo(() => {
     const rawNext = searchParams.get('next') || '';
@@ -97,16 +100,29 @@ export const LoginPage: React.FC = () => {
                 autoComplete="email"
               />
 
-              <Input
-                label="Password"
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                icon={Lock}
-                autoComplete="current-password"
-              />
+              <div>
+                <Input
+                  id="login-password"
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  icon={Lock}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-1 text-xs font-bold text-blue-700 hover:text-blue-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  aria-controls="login-password"
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  {showPassword ? 'Hide password' : 'Show password'}
+                </button>
+              </div>
 
               <div className="flex items-center justify-between gap-3 text-xs">
                 <Checkbox
@@ -114,16 +130,12 @@ export const LoginPage: React.FC = () => {
                   checked={rememberMe}
                   onChange={(event) => setRememberMe(event.target.checked)}
                 />
-                <a
-                  href="#forgot"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    showToast('Password reset link sent to registered business email', 'info');
-                  }}
+                <Link
+                  to="/forgot-password"
                   className="text-blue-600 font-semibold hover:underline whitespace-nowrap"
                 >
                   Forgot Password?
-                </a>
+                </Link>
               </div>
 
               <Button type="submit" variant="primary" size="md" className="w-full justify-center mt-2">
@@ -143,12 +155,12 @@ export const LoginPage: React.FC = () => {
         <div className="bg-slate-900 text-white p-6 sm:p-10 flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-800">
           <div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 text-[11px] font-bold uppercase tracking-wider mb-4 border border-blue-500/30">
-              <ShieldCheck className="w-3.5 h-3.5" /> Demo Access
+              <ShieldCheck className="w-3.5 h-3.5" /> Portal Access
             </div>
 
-            <h3 className="text-lg font-bold mb-2">Instant Demo Perspective Login</h3>
+            <h3 className="text-lg font-bold mb-2">Role-Based Portal Access</h3>
             <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-              Select a business persona to preview the portal from a buyer, admin, or sales workflow.
+              Select a business persona to enter the portal from a buyer, admin, or sales workflow.
             </p>
 
             <div className="space-y-2.5">

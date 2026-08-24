@@ -38,6 +38,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       case 'Passed':
       case 'Fully Available':
       case 'In Stock':
+      case 'Successful':
       case 'SUCCESS':
         return {
           bg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -67,6 +68,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       case 'Near Expiry':
       case 'Partial Availability':
       case 'Below MOQ':
+      case 'Review':
       case 'WARNING':
         return {
           bg: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -108,6 +110,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       case 'Exceeded':
       case 'Backorder':
       case 'Delivery Issue':
+      case 'Failed':
       case 'ALERT':
         return {
           bg: 'bg-rose-50 text-rose-700 border-rose-200',

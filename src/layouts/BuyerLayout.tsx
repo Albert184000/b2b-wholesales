@@ -24,9 +24,11 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { AccessDeniedState } from '../components/common/AccessDeniedState';
 import { Avatar, Button, Dropdown, NotificationDropdown } from '../components/ui';
 import { RoleSwitcher } from '../components/common/RoleSwitcher';
 import { formatCurrency } from '../utils/pricing';
+import { canAccessAdminPortal, canAccessBuyerPortal } from '../utils/rbac';
 
 const navigationItems = [
   { label: 'Dashboard', href: '/buyer/dashboard', icon: LayoutDashboard },
@@ -56,16 +58,31 @@ const pageTitles: Record<string, string> = {
   '/buyer/notifications': 'Notifications'
 };
 
+const sidebarScrollClasses =
+  'min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 pb-8 space-y-1 [scrollbar-width:thin] [scrollbar-color:rgb(51_65_85)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-700/80';
+
 export const BuyerLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { currentBuyer, currentUser, showToast } = useApp();
+  const [globalSearch, setGlobalSearch] = useState('');
+  const { currentBuyer, currentUser, products, rfqs, quotes, purchaseOrders, invoices, shipments, showToast } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [sidebarOpen]);
 
   const currentTitle = useMemo(() => {
     const matchingPath = Object.keys(pageTitles)
@@ -76,24 +93,100 @@ export const BuyerLayout: React.FC = () => {
   }, [location.pathname]);
 
   const creditUtilizationPercent = Math.round((currentBuyer.usedCredit / currentBuyer.creditLimit) * 100);
-  const sidebarWidth = sidebarCollapsed ? 'lg:w-20' : 'lg:w-72';
+  const sidebarWidth = sidebarCollapsed ? 'xl:w-20' : 'xl:w-72';
+
+  if (!canAccessBuyerPortal(currentUser.role)) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col bg-slate-50 text-slate-900">
+        <RoleSwitcher />
+        <main className="flex flex-1 items-center justify-center p-4 sm:p-8">
+          <AccessDeniedState
+            currentRole={currentUser.role}
+            returnTo={canAccessAdminPortal(currentUser.role) ? '/admin/dashboard' : '/'}
+            returnLabel={canAccessAdminPortal(currentUser.role) ? 'Return to Admin Dashboard' : 'Return Home'}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  const handleGlobalSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    const query = globalSearch.trim().toLowerCase();
+    if (!query) return;
+
+    const product = products.find((item) =>
+      [item.name, item.sku, item.brand, item.category].some((value) => value.toLowerCase().includes(query))
+    );
+    if (product) {
+      navigate(`/buyer/products/${product.id}`);
+      return;
+    }
+
+    const rfq = rfqs.find((item) =>
+      item.buyerId === currentBuyer.id &&
+      [item.id, item.rfqNumber, item.projectTitle].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
+    );
+    if (rfq) {
+      navigate(`/buyer/rfqs/${rfq.id}`);
+      return;
+    }
+
+    const quote = quotes.find((item) =>
+      item.buyerId === currentBuyer.id &&
+      [item.id, item.quoteNumber, item.rfqId].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
+    );
+    if (quote) {
+      navigate(`/buyer/quotes/${quote.id}`);
+      return;
+    }
+
+    const po = purchaseOrders.find((item) =>
+      item.buyerId === currentBuyer.id &&
+      [item.id, item.poNumber, item.buyerPoReference, item.quoteId].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
+    );
+    if (po) {
+      navigate(`/buyer/purchase-orders/${po.id}`);
+      return;
+    }
+
+    const invoice = invoices.find((item) =>
+      item.buyerId === currentBuyer.id &&
+      [item.id, item.invoiceNumber, item.poNumber, item.poId].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
+    );
+    if (invoice) {
+      navigate(`/buyer/invoices/${invoice.id}`);
+      return;
+    }
+
+    const shipment = shipments.find((item) =>
+      item.buyerId === currentBuyer.id &&
+      [item.id, item.shipmentNumber, item.trackingNumber, item.poNumber, item.poId].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
+    );
+    if (shipment) {
+      navigate(`/buyer/shipments/${shipment.id}`);
+      return;
+    }
+
+    showToast(`No buyer records matched "${globalSearch.trim()}".`, 'warning');
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-50 text-slate-900">
       <RoleSwitcher />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {sidebarOpen && (
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden"
+            className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs xl:hidden"
             onClick={() => setSidebarOpen(false)}
             aria-label="Close buyer navigation overlay"
           />
         )}
 
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-slate-300 flex flex-col transition-all duration-200 ease-in-out lg:static lg:translate-x-0 border-r border-slate-800 ${
+          className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] max-h-full w-72 flex-col overflow-hidden border-r border-slate-800 bg-slate-900 text-slate-300 transition-all duration-200 ease-in-out xl:sticky xl:top-0 xl:shrink-0 xl:translate-x-0 ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
           } ${sidebarWidth}`}
         >
@@ -117,7 +210,7 @@ export const BuyerLayout: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-                className="hidden lg:flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white xl:flex"
                 aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
                 {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
@@ -125,7 +218,7 @@ export const BuyerLayout: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSidebarOpen(false)}
-                className="lg:hidden h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white xl:hidden"
                 aria-label="Close sidebar"
               >
                 <X className="w-5 h-5" />
@@ -167,7 +260,7 @@ export const BuyerLayout: React.FC = () => {
             )}
           </div>
 
-          <nav className="flex-1 px-3 space-y-1 overflow-y-auto py-2">
+          <nav className={sidebarScrollClasses}>
             {navigationItems.map((item) => {
               const Icon = item.icon;
 
@@ -225,20 +318,23 @@ export const BuyerLayout: React.FC = () => {
               )}
             </div>
             {!sidebarCollapsed && (
-              <Link to="/login" title="Sign Out" className="text-slate-400 hover:text-rose-400 p-1.5">
+              <Link to="/login" title="Sign Out" aria-label="Sign out" className="text-slate-400 hover:text-rose-400 p-1.5">
                 <LogOut className="w-4 h-4" />
               </Link>
             )}
           </div>
         </aside>
 
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
           <header className="min-h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4 sticky top-0 z-20 shadow-xs">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
-                onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+                onClick={() => {
+                  setSidebarCollapsed(false);
+                  setSidebarOpen(true);
+                }}
+                className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 xl:hidden"
                 aria-label="Open buyer navigation"
               >
                 <Menu className="w-5 h-5" />
@@ -257,10 +353,20 @@ export const BuyerLayout: React.FC = () => {
               </div>
             </div>
 
-            <div className="hidden md:flex min-w-[240px] max-w-sm flex-1 items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-500">
+            <form
+              role="search"
+              onSubmit={handleGlobalSearch}
+              className="hidden md:flex min-w-[240px] max-w-sm flex-1 items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-500 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500"
+            >
               <Search className="mr-2 h-4 w-4 text-slate-400" />
-              <span className="truncate text-xs">Search products, POs, invoices...</span>
-            </div>
+              <input
+                value={globalSearch}
+                onChange={(event) => setGlobalSearch(event.target.value)}
+                aria-label="Search buyer products, RFQs, quotes, purchase orders, invoices, and shipments"
+                placeholder="Search products, POs, invoices..."
+                className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none"
+              />
+            </form>
 
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <Link to="/buyer/products" className="hidden sm:block">

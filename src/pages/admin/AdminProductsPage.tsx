@@ -8,8 +8,11 @@ import {
   Edit,
   Eye,
   Layers,
+  LockKeyhole,
   Package,
   Plus,
+  Save,
+  Trash2,
   Warehouse
 } from 'lucide-react';
 import {
@@ -18,15 +21,19 @@ import {
   Column,
   DataTable,
   FilterBar,
+  Input,
   KPICard,
+  Modal,
   PageHeader,
   SearchBar,
-  StatusBadge
+  StatusBadge,
+  Textarea
 } from '../../components/ui';
 import { useApp } from '../../context/AppContext';
 import { mockCategories } from '../../data/mockData';
 import { Product, ProductCategory } from '../../types';
 import { formatCurrency, formatTierRange, getBestTier } from '../../utils/pricing';
+import { hasPermission } from '../../utils/rbac';
 
 const getStockStatus = (product: Product) => {
   if (product.availableStock <= 0) return 'Out of Stock';
@@ -40,18 +47,48 @@ const tabOptions = [
   { id: 'pricing', label: 'Tier Pricing' }
 ];
 
+type CategoryDraft = Pick<ProductCategory, 'name' | 'slug' | 'description' | 'iconName'>;
+type CategoryRow = ProductCategory & {
+  activeCount: number;
+  lowStockCount: number;
+  status: string;
+};
+
+const defaultCategoryDraft: CategoryDraft = {
+  name: '',
+  slug: '',
+  description: '',
+  iconName: 'layers'
+};
+
+const buildSlug = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
 export const AdminProductsPage: React.FC = () => {
-  const { products, inventory, updateProductStatus, showToast } = useApp();
+  const { currentUser, products, inventory, updateProductStatus, showToast } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'products';
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [stockFilter, setStockFilter] = useState('ALL');
+  const [categories, setCategories] = useState<ProductCategory[]>(mockCategories);
+  const [inactiveCategoryIds, setInactiveCategoryIds] = useState<string[]>([]);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(defaultCategoryDraft);
 
   const lowStockCount = products.filter((product) => getStockStatus(product) === 'Low Stock').length;
   const outOfStockCount = products.filter((product) => getStockStatus(product) === 'Out of Stock').length;
   const inventoryValue = inventory.reduce((sum, item) => sum + item.available * item.unitCost, 0);
+  const canViewCostPrice = hasPermission(currentUser.role, 'products.view_cost_price');
+  const canCreateProducts = hasPermission(currentUser.role, 'products.create');
+  const canUpdateProducts = hasPermission(currentUser.role, 'products.update');
+  const canDeleteProducts = hasPermission(currentUser.role, 'products.delete');
 
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -73,7 +110,7 @@ export const AdminProductsPage: React.FC = () => {
 
   const categoryRows = useMemo(
     () =>
-      mockCategories.map((category) => {
+      categories.map((category) => {
         const categoryProducts = products.filter((product) => product.category === category.name);
         const activeProducts = categoryProducts.filter((product) => product.status === 'Active');
         const lowStockProducts = categoryProducts.filter((product) => getStockStatus(product) !== 'In Stock');
@@ -82,10 +119,11 @@ export const AdminProductsPage: React.FC = () => {
           ...category,
           itemCount: categoryProducts.length,
           activeCount: activeProducts.length,
-          lowStockCount: lowStockProducts.length
+          lowStockCount: lowStockProducts.length,
+          status: inactiveCategoryIds.includes(category.id) ? 'Inactive' : 'Active'
         };
       }),
-    [products]
+    [categories, inactiveCategoryIds, products]
   );
 
   const handleToggleStatus = (product: Product) => {
@@ -99,6 +137,82 @@ export const AdminProductsPage: React.FC = () => {
     setSelectedCategory('ALL');
     setStatusFilter('ALL');
     setStockFilter('ALL');
+  };
+
+  const openCategoryModal = (category?: ProductCategory) => {
+    if (category) {
+      setEditingCategoryId(category.id);
+      setCategoryDraft({
+        name: category.name,
+        slug: category.slug,
+        description: category.description,
+        iconName: category.iconName || 'layers'
+      });
+    } else {
+      setEditingCategoryId(null);
+      setCategoryDraft(defaultCategoryDraft);
+    }
+    setCategoryModalOpen(true);
+  };
+
+  const saveCategory = (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmedName = categoryDraft.name.trim();
+    if (!trimmedName) {
+      showToast('Category name is required.', 'error');
+      return;
+    }
+
+    const normalizedSlug = categoryDraft.slug.trim() || buildSlug(trimmedName);
+    if (editingCategoryId) {
+      setCategories((current) =>
+        current.map((category) =>
+          category.id === editingCategoryId
+            ? {
+                ...category,
+                name: trimmedName,
+                slug: normalizedSlug,
+                description: categoryDraft.description.trim(),
+                iconName: categoryDraft.iconName.trim() || 'layers'
+              }
+            : category
+        )
+      );
+      showToast(`${trimmedName} category updated.`, 'success');
+    } else {
+      const newCategory: ProductCategory = {
+        id: `cat-${Date.now()}`,
+        name: trimmedName,
+        slug: normalizedSlug,
+        description: categoryDraft.description.trim() || 'Wholesale category for approved B2B procurement teams.',
+        iconName: categoryDraft.iconName.trim() || 'layers',
+        itemCount: 0
+      };
+      setCategories((current) => [newCategory, ...current]);
+      showToast(`${trimmedName} category added to the catalog.`, 'success');
+    }
+
+    setCategoryModalOpen(false);
+  };
+
+  const toggleCategoryStatus = (category: CategoryRow) => {
+    setInactiveCategoryIds((current) =>
+      current.includes(category.id)
+        ? current.filter((id) => id !== category.id)
+        : [...current, category.id]
+    );
+    showToast(`${category.name} set to ${category.status === 'Active' ? 'Inactive' : 'Active'}.`, category.status === 'Active' ? 'warning' : 'success');
+  };
+
+  const deleteCategory = (category: CategoryRow) => {
+    if (category.itemCount > 0) {
+      showToast('Only empty categories can be deleted. Move products before deleting this category.', 'warning');
+      return;
+    }
+
+    setCategories((current) => current.filter((item) => item.id !== category.id));
+    setInactiveCategoryIds((current) => current.filter((id) => id !== category.id));
+    showToast(`${category.name} removed from the category directory.`, 'warning');
   };
 
   const productColumns: Column<Product>[] = [
@@ -192,25 +306,33 @@ export const AdminProductsPage: React.FC = () => {
               View
             </Button>
           </Link>
-          <Link to={`/admin/products/${product.id}/edit`}>
-            <Button variant="outline" size="xs" icon={Edit}>
+          {canUpdateProducts ? (
+            <Link to={`/admin/products/${product.id}/edit`}>
+              <Button variant="outline" size="xs" icon={Edit}>
+                Edit
+              </Button>
+            </Link>
+          ) : (
+            <Button variant="outline" size="xs" icon={Edit} disabled>
               Edit
             </Button>
-          </Link>
-          <Button
-            variant={product.status === 'Archived' ? 'success' : 'ghost'}
-            size="xs"
-            icon={product.status === 'Archived' ? CheckCircle2 : Archive}
-            onClick={() => handleToggleStatus(product)}
-          >
-            {product.status === 'Archived' ? 'Activate' : 'Deactivate'}
-          </Button>
+          )}
+          {canDeleteProducts && (
+            <Button
+              variant={product.status === 'Archived' ? 'success' : 'ghost'}
+              size="xs"
+              icon={product.status === 'Archived' ? CheckCircle2 : Archive}
+              onClick={() => handleToggleStatus(product)}
+            >
+              {product.status === 'Archived' ? 'Activate' : 'Deactivate'}
+            </Button>
+          )}
         </div>
       )
     }
   ];
 
-  const categoryColumns: Column<ProductCategory & { activeCount: number; lowStockCount: number }>[] = [
+  const categoryColumns: Column<CategoryRow>[] = [
     {
       key: 'category',
       header: 'Category',
@@ -245,6 +367,39 @@ export const AdminProductsPage: React.FC = () => {
           size="sm"
           showDot={category.lowStockCount > 0}
         />
+      )
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      accessor: (category) => <StatusBadge status={category.status} size="sm" />
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      accessor: (category) => (
+        <div className="flex min-w-[220px] flex-wrap items-center gap-1.5">
+          {canUpdateProducts && (
+            <>
+              <Button variant="outline" size="xs" icon={Edit} onClick={() => openCategoryModal(category)}>
+                Edit
+              </Button>
+              <Button
+                variant={category.status === 'Active' ? 'ghost' : 'success'}
+                size="xs"
+                icon={category.status === 'Active' ? Archive : CheckCircle2}
+                onClick={() => toggleCategoryStatus(category)}
+              >
+                {category.status === 'Active' ? 'Deactivate' : 'Activate'}
+              </Button>
+            </>
+          )}
+          {canDeleteProducts && (
+            <Button variant="ghost" size="xs" icon={Trash2} onClick={() => deleteCategory(category)}>
+              Delete
+            </Button>
+          )}
+        </div>
       )
     }
   ];
@@ -309,17 +464,24 @@ export const AdminProductsPage: React.FC = () => {
           { label: 'Products' }
         ]}
         actions={
-          <Link to="/admin/products/new">
+          canCreateProducts ? (
+            <Link to="/admin/products/new">
             <Button variant="primary" size="sm" icon={Plus}>
               Add Product
             </Button>
-          </Link>
+            </Link>
+          ) : undefined
         }
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KPICard title="Total Products" value={products.length} subtext={`${products.filter((product) => product.status === 'Active').length} active SKUs`} icon={Package} />
-        <KPICard title="Inventory Value" value={formatCurrency(inventoryValue)} subtext="Available stock at cost" icon={DollarSign} />
+        <KPICard
+          title="Inventory Value"
+          value={canViewCostPrice ? formatCurrency(inventoryValue) : 'Restricted'}
+          subtext={canViewCostPrice ? 'Available stock at cost' : 'Cost price permission required'}
+          icon={canViewCostPrice ? DollarSign : LockKeyhole}
+        />
         <KPICard title="Low Stock Products" value={lowStockCount} subtext="At or below reorder point" icon={AlertTriangle} badge={lowStockCount ? 'Review' : undefined} badgeVariant="amber" />
         <KPICard title="Out of Stock" value={outOfStockCount} subtext="Unavailable for quoting" icon={Warehouse} badge={outOfStockCount ? 'Action' : undefined} badgeVariant="danger" />
       </div>
@@ -343,6 +505,11 @@ export const AdminProductsPage: React.FC = () => {
         <Card
           title="Product Categories"
           subtitle="Category coverage and stock-alert rollups for the wholesale catalog."
+          action={
+            <Button variant="primary" size="sm" icon={Plus} onClick={() => openCategoryModal()}>
+              Add Category
+            </Button>
+          }
         >
           <DataTable columns={categoryColumns} data={categoryRows} />
         </Card>
@@ -371,7 +538,7 @@ export const AdminProductsPage: React.FC = () => {
                     label: 'Category',
                     value: selectedCategory,
                     onChange: setSelectedCategory,
-                    options: mockCategories.map((category) => ({ label: category.name, value: category.name }))
+                    options: categories.map((category) => ({ label: category.name, value: category.name }))
                   },
                   {
                     id: 'catalog',
@@ -406,6 +573,55 @@ export const AdminProductsPage: React.FC = () => {
           </div>
         </Card>
       )}
+
+      <Modal
+        isOpen={categoryModalOpen}
+        onClose={() => setCategoryModalOpen(false)}
+        title={editingCategoryId ? 'Edit Category' : 'Add Category'}
+        subtitle="Maintain category labels used across public, buyer, and admin catalog views."
+        size="md"
+      >
+        <form onSubmit={saveCategory} className="space-y-4">
+          <Input
+            label="Category Name"
+            required
+            value={categoryDraft.name}
+            onChange={(event) =>
+              setCategoryDraft((draft) => ({
+                ...draft,
+                name: event.target.value,
+                slug: editingCategoryId ? draft.slug : buildSlug(event.target.value)
+              }))
+            }
+          />
+          <Input
+            label="Slug"
+            required
+            value={categoryDraft.slug}
+            onChange={(event) => setCategoryDraft((draft) => ({ ...draft, slug: buildSlug(event.target.value) }))}
+          />
+          <Input
+            label="Icon Token"
+            value={categoryDraft.iconName}
+            onChange={(event) => setCategoryDraft((draft) => ({ ...draft, iconName: event.target.value }))}
+            helperText="Used by category cards where an icon mapping is available."
+          />
+          <Textarea
+            label="Description"
+            rows={3}
+            value={categoryDraft.description}
+            onChange={(event) => setCategoryDraft((draft) => ({ ...draft, description: event.target.value }))}
+          />
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={() => setCategoryModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" size="sm" icon={Save}>
+              {editingCategoryId ? 'Save Category' : 'Create Category'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

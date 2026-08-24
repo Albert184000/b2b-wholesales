@@ -8,6 +8,7 @@ import {
   Minus,
   Plus,
   SearchX,
+  SlidersHorizontal,
   Warehouse,
   TrendingDown
 } from 'lucide-react';
@@ -19,7 +20,10 @@ import {
   FilterBar,
   Pagination,
   PageHeader,
-  EmptyState
+  EmptyState,
+  Drawer,
+  Input,
+  Select
 } from '../../components/ui';
 import { mockProducts, mockCategories } from '../../data/mockData';
 import { Product } from '../../types';
@@ -31,16 +35,25 @@ import {
   getRfqLoginPath,
   getTierSavingsPercent
 } from '../../utils/pricing';
+import { applyPublicImageFallback } from '../../utils/publicImages';
 
 export const ProductCatalogPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryFromUrl = searchParams.get('category') || 'ALL';
+  const queryFromUrl = searchParams.get('q') || '';
+  const sortFromUrl = searchParams.get('sort') || 'popular';
+  const availabilityFromUrl = searchParams.get('availability') || 'ALL';
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(queryFromUrl);
   const [selectedCategory, setSelectedCategory] = useState(categoryFromUrl);
   const [selectedBrand, setSelectedBrand] = useState('ALL');
+  const [availabilityFilter, setAvailabilityFilter] = useState(availabilityFromUrl);
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [maxMoq, setMaxMoq] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [sortBy, setSortBy] = useState('popular');
+  const [sortBy, setSortBy] = useState(sortFromUrl);
   const [currentPage, setCurrentPage] = useState(1);
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     mockProducts.reduce<Record<string, number>>((acc, product) => {
@@ -52,11 +65,14 @@ export const ProductCatalogPage: React.FC = () => {
 
   useEffect(() => {
     setSelectedCategory(categoryFromUrl);
-  }, [categoryFromUrl]);
+    setSearchTerm(queryFromUrl);
+    setSortBy(sortFromUrl);
+    setAvailabilityFilter(availabilityFromUrl);
+  }, [availabilityFromUrl, categoryFromUrl, queryFromUrl, sortFromUrl]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory, selectedBrand, sortBy]);
+  }, [availabilityFilter, maxMoq, maxPrice, minPrice, searchTerm, selectedCategory, selectedBrand, sortBy]);
 
   const brands = useMemo(() => {
     const brandSet = new Set(mockProducts.map((product) => product.brand));
@@ -80,8 +96,25 @@ export const ProductCatalogPage: React.FC = () => {
       const matchesSearch = query === '' || searchableText.includes(query);
       const matchesCategory = selectedCategory === 'ALL' || product.category === selectedCategory;
       const matchesBrand = selectedBrand === 'ALL' || product.brand === selectedBrand;
+      const openingPrice = product.tierPricing[0]?.unitPrice || product.basePrice;
+      const matchesAvailability =
+        availabilityFilter === 'ALL' ||
+        (availabilityFilter === 'In Stock' && product.availableStock > product.reorderPoint) ||
+        (availabilityFilter === 'Low Stock' && product.availableStock > 0 && product.availableStock <= product.reorderPoint) ||
+        (availabilityFilter === 'Out of Stock' && product.availableStock <= 0);
+      const matchesMinPrice = !minPrice || openingPrice >= Number(minPrice);
+      const matchesMaxPrice = !maxPrice || openingPrice <= Number(maxPrice);
+      const matchesMaxMoq = !maxMoq || product.moq <= Number(maxMoq);
 
-      return matchesSearch && matchesCategory && matchesBrand;
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesBrand &&
+        matchesAvailability &&
+        matchesMinPrice &&
+        matchesMaxPrice &&
+        matchesMaxMoq
+      );
     });
 
     return [...matchingProducts].sort((a, b) => {
@@ -106,7 +139,7 @@ export const ProductCatalogPage: React.FC = () => {
           return Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || b.availableStock - a.availableStock;
       }
     });
-  }, [searchTerm, selectedCategory, selectedBrand, sortBy]);
+  }, [availabilityFilter, maxMoq, maxPrice, minPrice, searchTerm, selectedCategory, selectedBrand, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
   const paginatedProducts = filteredProducts.slice(
@@ -137,9 +170,23 @@ export const ProductCatalogPage: React.FC = () => {
     setSearchTerm('');
     setSelectedCategory('ALL');
     setSelectedBrand('ALL');
+    setAvailabilityFilter('ALL');
+    setMinPrice('');
+    setMaxPrice('');
+    setMaxMoq('');
     setSortBy('popular');
     setSearchParams({});
   };
+
+  const hasActiveFilters =
+    selectedCategory !== 'ALL' ||
+    selectedBrand !== 'ALL' ||
+    availabilityFilter !== 'ALL' ||
+    searchTerm !== '' ||
+    minPrice !== '' ||
+    maxPrice !== '' ||
+    maxMoq !== '' ||
+    sortBy !== 'popular';
 
   const setProductQuantity = (product: Product, value: number) => {
     const safeQuantity = Math.max(0, Math.min(9999, Math.floor(Number.isFinite(value) ? value : product.moq)));
@@ -276,6 +323,16 @@ export const ProductCatalogPage: React.FC = () => {
         breadcrumbs={[{ label: 'Catalog', href: '/products' }]}
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              icon={SlidersHorizontal}
+              className="lg:hidden"
+              onClick={() => setFiltersOpen(true)}
+            >
+              Filters
+            </Button>
             <div className="flex items-center border border-slate-200 rounded-lg p-0.5 bg-white">
               <button
                 type="button"
@@ -334,44 +391,177 @@ export const ProductCatalogPage: React.FC = () => {
           </div>
         </div>
 
-        <FilterBar
-          filters={[
-            {
-              id: 'cat',
-              label: 'Category',
-              value: selectedCategory,
-              onChange: updateCategory,
-              options: mockCategories.map((category) => ({ label: category.name, value: category.name }))
-            },
-            {
-              id: 'brand',
-              label: 'Brand',
-              value: selectedBrand,
-              onChange: setSelectedBrand,
-              options: brands.map((brand) => ({ label: brand, value: brand }))
-            }
-          ]}
-          hasActiveFilters={selectedCategory !== 'ALL' || selectedBrand !== 'ALL' || searchTerm !== ''}
-          onReset={resetFilters}
-          extraActions={
-            <span className="text-xs text-slate-500 font-medium">
-              Found <strong className="text-slate-900">{filteredProducts.length}</strong> wholesale SKUs
-            </span>
-          }
-        />
+        {hasActiveFilters && (
+          <div className="flex flex-wrap gap-2">
+            {[
+              searchTerm && `Search: ${searchTerm}`,
+              selectedCategory !== 'ALL' && `Category: ${selectedCategory}`,
+              selectedBrand !== 'ALL' && `Supplier: ${selectedBrand}`,
+              availabilityFilter !== 'ALL' && `Availability: ${availabilityFilter}`,
+              minPrice && `Min price: ${formatCurrency(Number(minPrice))}`,
+              maxPrice && `Max price: ${formatCurrency(Number(maxPrice))}`,
+              maxMoq && `Max MOQ: ${maxMoq}`,
+              sortBy !== 'popular' && `Sort: ${sortBy}`
+            ]
+              .filter(Boolean)
+              .map((chip) => (
+                <span
+                  key={String(chip)}
+                  className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700"
+                >
+                  {chip}
+                </span>
+              ))}
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
       </div>
 
-      {paginatedProducts.length === 0 ? (
-        <EmptyState
-          icon={SearchX}
-          title="No matching wholesale products"
-          description="Try another SKU, brand, or category. MOQ and tier-price filters reset with the catalog search."
-          actionText="Reset Filters"
-          onAction={resetFilters}
-          actionIcon={Package}
-        />
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <Drawer
+        isOpen={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        title="Catalog Filters"
+        position="right"
+        size="md"
+      >
+        <div className="space-y-4">
+          <FilterBar
+            filters={[
+              {
+                id: 'mobile-cat',
+                label: 'Category',
+                value: selectedCategory,
+                onChange: updateCategory,
+                options: mockCategories.map((category) => ({ label: category.name, value: category.name }))
+              },
+              {
+                id: 'mobile-brand',
+                label: 'Supplier',
+                value: selectedBrand,
+                onChange: setSelectedBrand,
+                options: brands.map((brand) => ({ label: brand, value: brand }))
+              },
+              {
+                id: 'mobile-availability',
+                label: 'Availability',
+                value: availabilityFilter,
+                onChange: setAvailabilityFilter,
+                options: [
+                  { label: 'In Stock', value: 'In Stock' },
+                  { label: 'Low Stock', value: 'Low Stock' },
+                  { label: 'Out of Stock', value: 'Out of Stock' }
+                ]
+              }
+            ]}
+            hasActiveFilters={hasActiveFilters}
+            onReset={resetFilters}
+          />
+          <Input type="number" min={0} label="Min Price" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
+          <Input type="number" min={0} label="Max Price" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
+          <Input type="number" min={0} label="Max MOQ" value={maxMoq} onChange={(event) => setMaxMoq(event.target.value)} />
+          <Button type="button" variant="primary" size="md" className="w-full" onClick={() => setFiltersOpen(false)}>
+            Show {filteredProducts.length} Products
+          </Button>
+        </div>
+      </Drawer>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="hidden lg:block">
+          <Card title="Refine Catalog" subtitle={`${filteredProducts.length} products match`} className="sticky top-28 border-slate-200">
+            <div className="space-y-4">
+              <Select
+                label="Category"
+                value={selectedCategory}
+                onChange={(event) => updateCategory(event.target.value)}
+                options={[
+                  { label: 'All categories', value: 'ALL' },
+                  ...mockCategories.map((category) => ({ label: category.name, value: category.name }))
+                ]}
+              />
+              <Select
+                label="Supplier"
+                value={selectedBrand}
+                onChange={(event) => setSelectedBrand(event.target.value)}
+                options={[
+                  { label: 'All suppliers', value: 'ALL' },
+                  ...brands.map((brand) => ({ label: brand, value: brand }))
+                ]}
+              />
+              <Select
+                label="Availability"
+                value={availabilityFilter}
+                onChange={(event) => setAvailabilityFilter(event.target.value)}
+                options={[
+                  { label: 'All availability', value: 'ALL' },
+                  { label: 'In Stock', value: 'In Stock' },
+                  { label: 'Low Stock', value: 'Low Stock' },
+                  { label: 'Out of Stock', value: 'Out of Stock' }
+                ]}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  type="number"
+                  min={0}
+                  label="Min Price"
+                  value={minPrice}
+                  onChange={(event) => setMinPrice(event.target.value)}
+                  placeholder="Any"
+                  className="h-10"
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  label="Max Price"
+                  value={maxPrice}
+                  onChange={(event) => setMaxPrice(event.target.value)}
+                  placeholder="Any"
+                  className="h-10"
+                />
+              </div>
+              <Input
+                type="number"
+                min={0}
+                label="Maximum MOQ"
+                value={maxMoq}
+                onChange={(event) => setMaxMoq(event.target.value)}
+                placeholder="Any minimum order quantity"
+                className="h-10"
+              />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-medium leading-relaxed text-slate-600">
+                Price filters use the opening wholesale tier. MOQ filters use each product minimum order quantity.
+              </div>
+              <Button
+                type="button"
+                variant={hasActiveFilters ? 'outline' : 'ghost'}
+                size="sm"
+                className="w-full justify-center"
+                onClick={resetFilters}
+                disabled={!hasActiveFilters}
+              >
+                Clear Filters
+              </Button>
+            </div>
+          </Card>
+        </aside>
+
+        <section className="min-w-0">
+          {paginatedProducts.length === 0 ? (
+            <EmptyState
+              icon={SearchX}
+              title="No matching wholesale products"
+              description="Try another SKU, brand, or category. MOQ and tier-price filters reset with the catalog search."
+              actionText="Reset Filters"
+              onAction={resetFilters}
+              actionIcon={Package}
+            />
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {paginatedProducts.map((product) => {
             const quantity = quantities[product.id] ?? product.moq;
             const estimate = getOrderEstimate(product, quantity);
@@ -388,7 +578,9 @@ export const ProductCatalogPage: React.FC = () => {
                       src={product.images[0]}
                       alt={product.name}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                       referrerPolicy="no-referrer"
+                      onError={(event) => applyPublicImageFallback(event, product.name)}
                     />
                     <div className="absolute top-2 left-2">
                       <StatusBadge status={product.status} size="sm" />
@@ -479,7 +671,9 @@ export const ProductCatalogPage: React.FC = () => {
                       src={product.images[0]}
                       alt={product.name}
                       className="w-full sm:w-28 h-40 sm:h-28 object-cover rounded-lg border border-slate-200 shrink-0"
+                      loading="lazy"
                       referrerPolicy="no-referrer"
+                      onError={(event) => applyPublicImageFallback(event, product.name)}
                     />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -549,17 +743,19 @@ export const ProductCatalogPage: React.FC = () => {
         </div>
       )}
 
-      {filteredProducts.length > 0 && (
-        <div className="mt-8">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filteredProducts.length}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-          />
-        </div>
-      )}
+          {filteredProducts.length > 0 && (
+            <div className="mt-8">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredProducts.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+              />
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 };

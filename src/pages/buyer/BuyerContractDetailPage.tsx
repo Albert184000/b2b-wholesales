@@ -359,7 +359,7 @@ export const BuyerContractDetailPage: React.FC = () => {
         isOpen={renewalModalOpen}
         onClose={() => setRenewalModalOpen(false)}
         title={`Request renewal for ${getContractNumber(contract)}`}
-        subtitle="Mock renewal request for buyer-visible tracking."
+        subtitle="Renewal request for buyer-visible tracking."
       >
         <div className="space-y-4">
           <Input
