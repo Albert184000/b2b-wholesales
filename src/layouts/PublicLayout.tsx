@@ -124,7 +124,7 @@ export const PublicLayout: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 whitespace-nowrap xl:gap-4">
               <span className="flex items-center gap-1">
-                <Phone className="h-3 w-3 text-slate-500" /> +855 (0) 23 999 800
+                <Phone className="h-3 w-3 text-slate-500" /> +855 962 084 112
               </span>
               <span className="hidden text-slate-700 2xl:inline">|</span>
               <span className="hidden items-center gap-1 2xl:flex">
@@ -145,13 +145,13 @@ export const PublicLayout: React.FC = () => {
                   <span className="whitespace-nowrap text-lg font-extrabold tracking-tight text-slate-950 2xl:text-xl">
                     Wholesale<span className="text-blue-600">Hub</span>
                   </span>
-                  <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-700 min-[420px]:inline">
+                  {/* <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-700 min-[420px]:inline">
                     B2B
-                  </span>
+                  </span> */}
                 </div>
-                <span className="hidden whitespace-nowrap text-[10px] font-semibold text-slate-500 xl:block">
+                {/* <span className="hidden whitespace-nowrap text-[10px] font-semibold text-slate-500 xl:block">
                   Enterprise wholesale marketplace
-                </span>
+                </span> */}
               </div>
             </Link>
 
@@ -175,13 +175,13 @@ export const PublicLayout: React.FC = () => {
               className="hidden min-w-0 flex-1 items-center rounded-xl border border-slate-300 bg-white shadow-xs transition focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500 md:flex lg:hidden"
             >
               <Search className="ml-3 h-4 w-4 shrink-0 text-slate-400" />
-              <input
+              {/* <input
                 value={globalSearch}
                 onChange={(event) => setGlobalSearch(event.target.value)}
                 placeholder="Search wholesale products..."
                 aria-label="Search wholesale products"
                 className="h-11 min-w-0 flex-1 bg-transparent px-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
-              />
+              /> */}
               <button
                 type="submit"
                 className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -195,7 +195,7 @@ export const PublicLayout: React.FC = () => {
               <label htmlFor="public-currency" className="sr-only">
                 Currency
               </label>
-              <div className="relative hidden lg:block">
+              {/* <div className="relative hidden lg:block">
                 <DollarSign className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                 <select
                   id="public-currency"
@@ -212,7 +212,7 @@ export const PublicLayout: React.FC = () => {
                   <option value="SGD">SGD</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-2.5 top-2.5 h-4 w-4 text-slate-400" />
-              </div>
+              </div> */}
               <Link to="/login">
                 <Button variant="outline" size="sm" icon={User}>
                   Login
@@ -240,7 +240,7 @@ export const PublicLayout: React.FC = () => {
           </div>
         </div>
 
-        <div className="hidden border-t border-slate-200 bg-white lg:block">
+        {/* <div className="hidden border-t border-slate-200 bg-white lg:block">
           <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
             <form
               role="search"
@@ -285,7 +285,7 @@ export const PublicLayout: React.FC = () => {
               </button>
             </form>
           </div>
-        </div>
+        </div> */}
 
         <div className="border-t border-slate-200 bg-white px-4 py-3 md:hidden">
           <form role="search" onSubmit={handleSearch} className="relative w-full">
