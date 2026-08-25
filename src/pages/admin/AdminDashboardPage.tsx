@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  LucideIcon,
   AlertTriangle,
   ArrowRight,
   BarChart3,
@@ -72,7 +73,7 @@ interface DashboardKpi {
   title: string;
   value: string | number;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   subtext: string;
   change?: string;
   changeType?: KpiTone;

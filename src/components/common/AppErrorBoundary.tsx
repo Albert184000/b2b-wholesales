@@ -11,9 +11,6 @@ interface AppErrorBoundaryState {
 }
 
 export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
-  declare props: AppErrorBoundaryProps;
-  declare setState: (state: Partial<AppErrorBoundaryState>) => void;
-
   state: AppErrorBoundaryState = {
     hasError: false
   };
